@@ -1,7 +1,10 @@
+import logging
 import os
 import sqlite3
 import time
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryService:
@@ -14,69 +17,83 @@ class MemoryService:
     - Lưu lịch nhắc nhở tự động (reminders).
     """
 
-    def __init__(self, db_path: str = "data/airi_memory.db"):
+    def __init__(self, db_path: Optional[str] = None):
+        if not db_path:
+            db_path = os.environ.get("AIRI_DB_PATH", "/tmp/airi_memory.db")
         self.db_path = db_path
         db_dir = os.path.dirname(self.db_path)
         if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+            except Exception as e:
+                logger.warning("Could not create db directory %s: %s", db_dir, e)
+                self.db_path = "/tmp/airi_memory.db"
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        try:
+            conn = sqlite3.connect(self.db_path)
+        except Exception as e:
+            logger.warning("Could not connect to %s: %s, using :memory:", self.db_path, e)
+            self.db_path = ":memory:"
+            conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
     def _init_db(self) -> None:
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    timestamp REAL NOT NULL
+        try:
+            with self._get_connection() as conn:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        role TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        timestamp REAL NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS user_facts (
-                    user_id INTEGER NOT NULL,
-                    key TEXT NOT NULL,
-                    value TEXT NOT NULL,
-                    updated_at REAL NOT NULL,
-                    PRIMARY KEY (user_id, key)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS user_facts (
+                        user_id INTEGER NOT NULL,
+                        key TEXT NOT NULL,
+                        value TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        PRIMARY KEY (user_id, key)
+                    )
+                    """
                 )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    created_at REAL NOT NULL
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        title TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at REAL NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS reminders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    reminder_text TEXT NOT NULL,
-                    remind_at REAL NOT NULL,
-                    is_sent INTEGER DEFAULT 0,
-                    created_at REAL NOT NULL
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS reminders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        reminder_text TEXT NOT NULL,
+                        remind_at REAL NOT NULL,
+                        is_sent INTEGER DEFAULT 0,
+                        created_at REAL NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id, id DESC)"
-            )
-            conn.commit()
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id, id DESC)"
+                )
+                conn.commit()
+        except Exception as e:
+            logger.error("Error initializing DB at %s: %s", self.db_path, e)
 
     # --- Lịch sử hội thoại ---
     def add_message(self, user_id: int, role: str, content: str) -> None:

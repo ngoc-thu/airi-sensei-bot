@@ -34,11 +34,24 @@ async def main():
     await site.start()
     logger.info("HTTP Server listening on http://%s:%d", settings.HOST, settings.PORT)
 
-    # 3. Start Telegram Bot Polling
-    await bot_app.initialize()
-    await bot_app.start()
-    await bot_app.updater.start_polling(drop_pending_updates=True)
-    logger.info("Telegram Bot polling started successfully!")
+    # 3. Start Telegram Bot Polling (Async non-blocking with retry for zero-downtime deploys)
+    async def start_polling_with_retry():
+        max_retries = 5
+        for attempt in range(1, max_retries + 1):
+            try:
+                await bot_app.initialize()
+                await bot_app.start()
+                await bot_app.updater.start_polling(drop_pending_updates=True)
+                logger.info("Telegram Bot polling started successfully!")
+                return
+            except Exception as e:
+                logger.warning("Polling start attempt %d/%d error: %s", attempt, max_retries, e)
+                if attempt < max_retries:
+                    await asyncio.sleep(3)
+                else:
+                    logger.error("Failed to start polling after %d retries: %s", max_retries, e)
+
+    polling_task = asyncio.create_task(start_polling_with_retry())
 
     # 4. Background tasks: Keep-alive & Reminder Worker
     memory_service = MemoryService()
@@ -66,9 +79,16 @@ async def main():
             reminder_task.cancel()
         if keep_alive_task:
             keep_alive_task.cancel()
-        await bot_app.updater.stop()
-        await bot_app.stop()
-        await bot_app.shutdown()
+        if polling_task:
+            polling_task.cancel()
+        try:
+            if bot_app.updater and bot_app.updater.running:
+                await bot_app.updater.stop()
+            if bot_app.running:
+                await bot_app.stop()
+                await bot_app.shutdown()
+        except Exception as e:
+            logger.debug("Error during bot app stop: %s", e)
         await runner.cleanup()
         logger.info("Shutdown complete.")
 

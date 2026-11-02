@@ -144,6 +144,55 @@ async def test_text_message_handler_with_agent_image(mock_update, mock_context):
             mock_update.message.reply_text.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_text_message_handler_group_ignored(mock_update, mock_context):
+    group_chat = Chat(id=456, type=ChatType.GROUP)
+    mock_update.effective_chat = group_chat
+    mock_update.message.chat = group_chat
+    mock_update.message.text = "Chào mọi người trong nhóm"
+    mock_update.message.reply_to_message = None
+    mock_update.message.entities = []
+    mock_context.bot.username = "AiriSenseiBot"
+
+    await text_message_handler(mock_update, mock_context)
+    mock_update.message.reply_text.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_text_message_handler_group_mention_only(mock_update, mock_context):
+    supergroup_chat = Chat(id=456, type=ChatType.SUPERGROUP)
+    mock_update.effective_chat = supergroup_chat
+    mock_update.message.chat = supergroup_chat
+    mock_update.message.text = "@AiriSenseiBot"
+    mock_update.message.reply_to_message = None
+    mock_update.message.entities = []
+    mock_context.bot.username = "AiriSenseiBot"
+
+    with patch("app.bot.handlers.auth_service.is_authorized", return_value=True):
+        await text_message_handler(mock_update, mock_context)
+        mock_update.message.reply_text.assert_called_once()
+        assert "Airi nghe đây" in mock_update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_text_message_handler_group_with_question(mock_update, mock_context):
+    supergroup_chat = Chat(id=456, type=ChatType.SUPERGROUP)
+    mock_update.effective_chat = supergroup_chat
+    mock_update.message.chat = supergroup_chat
+    mock_update.message.text = "@AiriSenseiBot thời tiết hôm nay thế nào?"
+    mock_update.message.reply_to_message = None
+    mock_update.message.entities = []
+    mock_context.bot.username = "AiriSenseiBot"
+
+    agent_result = AgentResult(text="Trời đẹp!", images=[], tools_used=[])
+    with patch("app.bot.handlers.auth_service.is_authorized", return_value=True):
+        with patch("app.bot.handlers.airi_agent.run", new_callable=AsyncMock, return_value=agent_result) as mock_run:
+            await text_message_handler(mock_update, mock_context)
+            mock_run.assert_called_once()
+            assert mock_run.call_args[1]["user_input"] == "thời tiết hôm nay thế nào?"
+            mock_update.message.reply_text.assert_called_once()
+
+
 def test_detect_image_prompt():
     assert detect_image_prompt("tạo ảnh con mèo") == "con mèo"
     assert detect_image_prompt("vẽ một chú cún con dễ thương") == "một chú cún con dễ thương"

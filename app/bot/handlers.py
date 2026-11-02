@@ -4,7 +4,7 @@ import re
 import time
 from typing import Optional
 from telegram import Update
-from telegram.constants import ChatAction, ParseMode
+from telegram.constants import ChatAction, ParseMode, ChatType
 from telegram.ext import ContextTypes
 from app.config import get_settings
 from app.ai.chat_service import ChatService
@@ -245,9 +245,52 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     if not user_message:
         return
 
+    chat_type = update.effective_chat.type if update.effective_chat else ChatType.PRIVATE
+    bot_username = ((context.bot and context.bot.username) or "AiriSenseiBot").lower()
+
+    # Trong nhóm / siêu nhóm: Chỉ trả lời khi được tag hoặc reply tin nhắn của bot
+    if chat_type in (ChatType.GROUP, ChatType.SUPERGROUP):
+        is_reply_to_bot = bool(
+            update.message.reply_to_message
+            and update.message.reply_to_message.from_user
+            and update.message.reply_to_message.from_user.id == context.bot.id
+        )
+        is_mentioned = bool(
+            f"@{bot_username}" in user_message.lower()
+            or (
+                update.message.entities
+                and any(
+                    e.type == "mention"
+                    and user_message[e.offset : e.offset + e.length].lower() == f"@{bot_username}"
+                    for e in update.message.entities
+                )
+            )
+        )
+
+        if not (is_reply_to_bot or is_mentioned):
+            return
+
+        # Loại bỏ tag @bot ra khỏi câu hỏi để AI nhận prompt sạch
+        cleaned_message = re.sub(rf"@{re.escape(bot_username)}\b", "", user_message, flags=re.IGNORECASE).strip()
+        cleaned_message = re.sub(r"^[\s,:;!-]+", "", cleaned_message).strip()
+    else:
+        cleaned_message = user_message.strip()
+
     # Kiểm tra phân quyền xác thực trước khi xử lý
     if not await check_authorization(update):
         return
+
+    # Nếu trong group chỉ tag gọi bot mà không có nội dung câu hỏi
+    if chat_type in (ChatType.GROUP, ChatType.SUPERGROUP) and (
+        not cleaned_message or cleaned_message.lower() in ("ơi", "oi", "alo", "hi", "hello", "ê", "e")
+    ):
+        user_name = update.effective_user.first_name if update.effective_user else "bạn"
+        await update.message.reply_text(
+            f"🌸 Dạ Airi nghe đây ạ {user_name}! Em có thể giúp gì cho bạn và mọi người trong nhóm thế ạ? ✨"
+        )
+        return
+
+    user_message = cleaned_message or user_message
 
     user_id = update.effective_user.id
     await update.message.reply_chat_action(ChatAction.TYPING)

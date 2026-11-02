@@ -44,7 +44,7 @@ async def main():
             try:
                 await bot_app.initialize()
                 await bot_app.start()
-                await bot_app.updater.start_polling(drop_pending_updates=True)
+                await bot_app.updater.start_polling(drop_pending_updates=False)
                 logger.info("Telegram Bot polling started successfully!")
 
                 # 4. Start Reminder Worker once bot is initialized

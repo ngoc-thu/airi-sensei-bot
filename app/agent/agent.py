@@ -82,6 +82,12 @@ class AiriAgent:
                 api_key=self.settings.GROQ_API_KEY,
                 timeout=25.0,
             )
+        if self.settings.GEMINI_API_KEY and model in self.settings.gemini_models_list:
+            return AsyncOpenAI(
+                base_url=self.settings.GEMINI_BASE_URL,
+                api_key=self.settings.GEMINI_API_KEY,
+                timeout=30.0,
+            )
         if model == "openai-fast":
             return AsyncOpenAI(
                 base_url="https://text.pollinations.ai/openai",
@@ -235,12 +241,19 @@ class AiriAgent:
         successful_model = ""
 
         models_to_try: List[str] = []
+        # Tier 1: Groq Cloud (14.4k RPD / ultra-fast)
         if self.settings.GROQ_API_KEY and self.settings.groq_models_list:
             models_to_try.extend(self.settings.groq_models_list)
+        # Tier 2: Google Gemini (1.5k RPD / 1M context / high reasoning)
+        if self.settings.GEMINI_API_KEY and self.settings.gemini_models_list:
+            models_to_try.extend(self.settings.gemini_models_list)
+        # Tier 3: OpenRouter Free Models
         if self.settings.OPENROUTER_API_KEY and self.settings.openrouter_free_models_list:
             models_to_try.extend(self.settings.openrouter_free_models_list)
+        # Tier 4: B.AI Primary Model
         if self.settings.AI_API_KEY:
             models_to_try.append(self.settings.AI_PRIMARY_MODEL)
+        # Tier 5: Zero-Failure Fallback
         models_to_try.append("openai-fast")
 
         max_iterations = 4

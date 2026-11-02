@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from telegram import Update, Message, User, Chat
 from telegram.constants import ChatType
 from app.config import Settings
-from app.bot.handlers import start_command, clear_command, image_command
+from app.bot.handlers import start_command, clear_command, image_command, detect_image_prompt, text_message_handler
 
 
 @pytest.fixture
@@ -56,3 +56,11 @@ async def test_image_command_no_prompt(mock_update, mock_context):
     await image_command(mock_update, mock_context)
     mock_update.message.reply_text.assert_called_once()
     assert "/image" in mock_update.message.reply_text.call_args[0][0]
+
+
+def test_detect_image_prompt():
+    assert detect_image_prompt("tạo ảnh con mèo") == "con mèo"
+    assert detect_image_prompt("vẽ một chú cún con dễ thương") == "một chú cún con dễ thương"
+    assert detect_image_prompt("vẽ tranh phong cảnh anime") == "phong cảnh anime"
+    assert detect_image_prompt("draw a futuristic robot") == "a futuristic robot"
+    assert detect_image_prompt("thời tiết hôm nay thế nào") is None

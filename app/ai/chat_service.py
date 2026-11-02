@@ -53,7 +53,7 @@ class ChatService:
 
         messages = [{"role": "system", "content": AIRI_SYSTEM_PROMPT}] + user_history
 
-        # Dàn model cascading fallback
+        # 1. Dàn model chính & fallback từ B.AI
         candidate_models = [self.settings.AI_PRIMARY_MODEL] + self.settings.fallback_models_list
 
         client = self._get_client()
@@ -79,7 +79,29 @@ class ChatService:
                     e
                 )
 
-        # Fallback an toàn nếu tất cả các model đều gặp sự cố (ví dụ tài khoản hết quota)
+        # 2. Thử Free Fallback Provider (Pollinations AI text engine - hoàn toàn miễn phí, 0 key)
+        try:
+            logger.info("Attempting free fallback provider (Pollinations AI)...")
+            free_client = AsyncOpenAI(
+                base_url="https://text.pollinations.ai/openai",
+                api_key="none",
+                timeout=25.0
+            )
+            free_response = await free_client.chat.completions.create(
+                model="openai",
+                messages=messages,
+                max_tokens=1500,
+                temperature=0.7,
+            )
+            if free_response.choices and free_response.choices[0].message.content:
+                reply = free_response.choices[0].message.content.strip()
+                user_history.append({"role": "assistant", "content": reply})
+                logger.info("Successfully got response from free fallback provider!")
+                return reply, "Airi-Flash"
+        except Exception as free_err:
+            logger.warning("Free fallback provider failed: %s", free_err)
+
+        # 3. Fallback an toàn nếu tất cả các model đều gặp sự cố
         logger.error("All AI models in cascade failed. Returning graceful fallback.")
         fallback_reply = (
             f"Chào bạn, mình là **Airi Sensei**! 🌸\n\n"

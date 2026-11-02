@@ -79,34 +79,73 @@ DEFAULT_USER_AGENT = (
 )
 
 
+async def _search_bing(query: str, max_results: int = 4) -> List[str]:
+    url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}"
+    headers = {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+    }
+    timeout = aiohttp.ClientTimeout(total=8)
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return []
+            text = await resp.text()
+
+    items = re.findall(r'<li class="b_algo"[^>]*>(.*?)</li>', text, re.DOTALL)
+    results = []
+    for item in items:
+        title_m = re.search(r'<h2><a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', item, re.DOTALL)
+        p_m = re.search(r'<p[^>]*>(.*?)</p>', item, re.DOTALL)
+        if title_m:
+            title = html.unescape(re.sub(r'<[^>]+>', '', title_m.group(2)).strip())
+            snippet = html.unescape(re.sub(r'<[^>]+>', '', p_m.group(1)).strip()) if p_m else ""
+            if title:
+                results.append(f"{len(results) + 1}. **{title}**: {snippet}")
+        if len(results) >= max_results:
+            break
+    return results
+
+
+async def _search_google(query: str, max_results: int = 4) -> List[str]:
+    url = f"https://www.google.com/search?q={urllib.parse.quote(query)}&hl=vi"
+    headers = {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+    }
+    timeout = aiohttp.ClientTimeout(total=8)
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return []
+            text = await resp.text()
+
+    items = re.findall(r'<div class="[^"]*BNeawe[^"]*"[^>]*>(.*?)</div>', text, re.DOTALL)
+    results = []
+    for item in items:
+        clean = html.unescape(re.sub(r'<[^>]+>', '', item).strip())
+        if len(clean) > 20 and clean not in results:
+            results.append(f"{len(results) + 1}. {clean}")
+        if len(results) >= max_results:
+            break
+    return results
+
+
 async def web_search(query: str, max_results: int = 4) -> str:
     """
-    Tìm kiếm thông tin thời gian thực trên web bằng DuckDuckGo
+    Tìm kiếm thông tin thời gian thực trên web bằng Bing và Google
     """
-    url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
-    headers = {"User-Agent": DEFAULT_USER_AGENT}
-
     try:
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    return f"Không thể tìm kiếm web (HTTP {resp.status})."
-                raw_html = await resp.read()
-                content = raw_html.decode("utf-8", errors="ignore")
+        results = await _search_bing(query, max_results=max_results)
+        if results:
+            return "\n\n".join(results)
 
-        snippets = re.findall(r"<a class=\"result__snippet\"[^>]*>(.*?)</a>", content, re.DOTALL)
-        titles = re.findall(r"<a class=\"result__url\"[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", content, re.DOTALL)
+        results = await _search_google(query, max_results=max_results)
+        if results:
+            return "\n\n".join(results)
 
-        if not snippets:
-            return "Không tìm thấy kết quả tìm kiếm nào phù hợp."
-
-        results = []
-        for i, snippet in enumerate(snippets[:max_results]):
-            clean_s = html.unescape(re.sub(r"<[^>]+>", "", snippet).strip())
-            results.append(f"{i+1}. {clean_s}")
-
-        return "\n\n".join(results)
+        return f"Không tìm thấy kết quả phù hợp cho: '{query}'."
     except Exception as e:
         logger.warning("Web search failed for query '%s': %s", query, e)
         return f"Lỗi khi tìm kiếm: {e}"

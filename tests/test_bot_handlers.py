@@ -2,8 +2,18 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from telegram import Update, Message, User, Chat
 from telegram.constants import ChatType
-from app.config import Settings
-from app.bot.handlers import start_command, clear_command, image_command, detect_image_prompt, auth_command
+from app.agent.agent import AgentResult
+from app.bot.handlers import (
+    start_command,
+    clear_command,
+    image_command,
+    detect_image_prompt,
+    auth_command,
+    help_command,
+    models_command,
+    status_command,
+    text_message_handler,
+)
 
 
 @pytest.fixture
@@ -42,6 +52,28 @@ async def test_start_command(mock_update, mock_context):
 
 
 @pytest.mark.asyncio
+async def test_help_command(mock_update, mock_context):
+    await help_command(mock_update, mock_context)
+    mock_update.message.reply_text.assert_called_once()
+    assert "HƯỚNG DẪN" in mock_update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_models_command(mock_update, mock_context):
+    with patch("app.bot.handlers.auth_service.is_authorized", return_value=True):
+        await models_command(mock_update, mock_context)
+        mock_update.message.reply_text.assert_called_once()
+        assert "OpenRouter" in mock_update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_status_command(mock_update, mock_context):
+    await status_command(mock_update, mock_context)
+    mock_update.message.reply_text.assert_called_once()
+    assert "Online 24/7" in mock_update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
 async def test_auth_command_success(mock_update, mock_context):
     mock_context.args = ["airi2026"]
     with patch("app.bot.handlers.auth_service.authenticate", return_value=True):
@@ -63,10 +95,12 @@ async def test_auth_command_fail(mock_update, mock_context):
 async def test_clear_command_authorized(mock_update, mock_context):
     with patch("app.bot.handlers.auth_service.is_authorized", return_value=True):
         with patch("app.bot.handlers.chat_service") as mock_chat:
-            await clear_command(mock_update, mock_context)
-            mock_chat.clear_history.assert_called_once_with(123)
-            mock_update.message.reply_text.assert_called_once()
-            assert "làm mới" in mock_update.message.reply_text.call_args[0][0]
+            with patch("app.bot.handlers.airi_agent") as mock_agent:
+                await clear_command(mock_update, mock_context)
+                mock_chat.clear_history.assert_called_once_with(123)
+                mock_agent.clear_history.assert_called_once_with(123)
+                mock_update.message.reply_text.assert_called_once()
+                assert "làm mới" in mock_update.message.reply_text.call_args[0][0]
 
 
 @pytest.mark.asyncio
@@ -75,6 +109,39 @@ async def test_clear_command_unauthorized(mock_update, mock_context):
         await clear_command(mock_update, mock_context)
         mock_update.message.reply_text.assert_called_once()
         assert "Truy cập bị từ chối" in mock_update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_text_message_handler_with_agent(mock_update, mock_context):
+    mock_update.message.text = "Thời tiết hôm nay thế nào?"
+    agent_result = AgentResult(
+        text="Hôm nay trời nắng đẹp!",
+        images=[],
+        tools_used=["web_search"]
+    )
+    with patch("app.bot.handlers.auth_service.is_authorized", return_value=True):
+        with patch("app.bot.handlers.airi_agent.run", new_callable=AsyncMock, return_value=agent_result):
+            await text_message_handler(mock_update, mock_context)
+            mock_update.message.reply_text.assert_called_once()
+            call_text = mock_update.message.reply_text.call_args[0][0]
+            assert "Hôm nay trời nắng đẹp!" in call_text
+            assert "web_search" in call_text
+
+
+@pytest.mark.asyncio
+async def test_text_message_handler_with_agent_image(mock_update, mock_context):
+    mock_update.message.text = "Vẽ một chú mèo"
+    fake_img_bytes = b"fake_png_data"
+    agent_result = AgentResult(
+        text="Đây là bức tranh chú mèo!",
+        images=[(fake_img_bytes, "a cute cat")],
+        tools_used=["generate_image"]
+    )
+    with patch("app.bot.handlers.auth_service.is_authorized", return_value=True):
+        with patch("app.bot.handlers.airi_agent.run", new_callable=AsyncMock, return_value=agent_result):
+            await text_message_handler(mock_update, mock_context)
+            mock_update.message.reply_photo.assert_called_once()
+            mock_update.message.reply_text.assert_called_once()
 
 
 def test_detect_image_prompt():

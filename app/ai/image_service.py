@@ -16,7 +16,10 @@ def clean_prompt(prompt: str) -> str:
     """
     cleaned = prompt.strip()
     patterns = [
-        r"^(?:hãy\s+)?(?:tạo|vẽ|sinh|generate|draw)\s+(?:cho\s+(?:mình|em|anh|tôi)\s+)?(?:bức\s+)?(?:ảnh|tranh|hình|image|picture)?\s*(?:về|với)?\s*",
+        (
+            r"^(?:hãy\s+)?(?:tạo|vẽ|sinh|generate|draw)\s+(?:cho\s+(?:mình|em|anh|tôi)\s+)?"
+            r"(?:bức\s+)?(?:ảnh|tranh|hình|image|picture)?\s*(?:về|với)?\s*"
+        ),
         r"^(?:tạo\s+ảnh|vẽ\s+ảnh|vẽ\s+tranh|vẽ\s+hình)\s*[:\s]*",
         r"^(?:bức\s+ảnh|bức\s+tranh|hình\s+ảnh)\s+(?:về|của)?\s*",
     ]

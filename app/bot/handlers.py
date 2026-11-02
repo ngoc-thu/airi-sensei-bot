@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.ai.chat_service import ChatService
 from app.ai.image_service import ImageService, clean_prompt
 from app.services.auth_service import AuthService
+from app.agent.agent import AiriAgent
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ settings = get_settings()
 chat_service = ChatService(settings=settings)
 image_service = ImageService(settings=settings)
 auth_service = AuthService(settings=settings)
+airi_agent = AiriAgent(settings=settings, image_service=image_service)
 BOT_START_TIME = time.time()
 
 
@@ -27,7 +29,10 @@ def detect_image_prompt(text: str) -> Optional[str]:
     """
     text_clean = text.strip()
     patterns = [
-        r"^(?:hãy\s+)?(?:tạo|vẽ|sinh|generate|draw)\s+(?:cho\s+(?:mình|em|anh|tôi)\s+)?(?:bức\s+)?(?:ảnh|tranh|hình|image|picture)?\s*(?:về|với)?\s*(.+)$",
+        (
+            r"^(?:hãy\s+)?(?:tạo|vẽ|sinh|generate|draw)\s+(?:cho\s+(?:mình|em|anh|tôi)\s+)?"
+            r"(?:bức\s+)?(?:ảnh|tranh|hình|image|picture)?\s*(?:về|với)?\s*(.+)$"
+        ),
         r"^(?:tạo\s+ảnh|vẽ\s+ảnh|vẽ\s+tranh|vẽ\s+hình)\s*[:\s]*\s*(.+)$",
         r"^(?:vẽ|draw)\s+(.+)$",
     ]
@@ -55,7 +60,7 @@ async def check_authorization(update: Update) -> bool:
     text = (
         "🔒 **Truy cập bị từ chối!**\n\n"
         "Bot Airi Sensei đang hoạt động ở chế độ riêng tư (Private). "
-        "Chỉ quản trị viên đã xác thực mới có quyền trò chuyện và tạo ảnh.\n\n"
+        "Chỉ quản trị viên đã xác thực mới có quyền trò chuyện và sử dụng Agent.\n\n"
         f"🆔 **Telegram ID của bạn:** `{user_id}`\n\n"
         "👉 Nếu bạn có mật mã quản trị, hãy nhập:\n"
         "`/auth <mật_khẩu>`"
@@ -74,7 +79,7 @@ async def auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"🔑 **Xác thực quyền sử dụng:**\n\n"
             f"ID của bạn: `{user_id}`\n\n"
             "Vui lòng nhập lệnh kèm mật mã:\n`/auth <mật_khẩu>`",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
         return
 
@@ -82,9 +87,9 @@ async def auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if auth_service.authenticate(user_id, passcode):
         await update.message.reply_text(
             f"✅ **Xác thực thành công!** 🌸\n\n"
-            f"Chào mừng anh! Quyền truy cập bot Airi Sensei đã được kích hoạt cho tài khoản của anh (ID: `{user_id}`).\n\n"
-            "Bây giờ anh có thể thoải mái hỏi đáp và vẽ tranh rồi nhé! ✨",
-            parse_mode=ParseMode.MARKDOWN
+            f"Chào mừng anh! Quyền truy cập AI Agent Airi Sensei đã được kích hoạt cho tài khoản `{user_id}`.\n\n"
+            "Bây giờ anh có thể tự do trò chuyện, tìm kiếm web, đọc link, làm toán và vẽ tranh rồi nhé! ✨",
+            parse_mode=ParseMode.MARKDOWN,
         )
     else:
         await update.message.reply_text("❌ Mật khẩu xác thực không đúng. Vui lòng kiểm tra lại!")
@@ -100,37 +105,42 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     text = (
         f"🌸 **Chào {user_name}! Mình là Airi Sensei (@AiriSenseiBot)** 🌸\n"
         f"Trạng thái tài khoản: {status_tag}\n\n"
-        "Rất vui được đồng hành cùng bạn! Mình có 2 tính năng chính:\n\n"
-        "💬 **1. Hỏi đáp thông minh:** Bạn chỉ cần nhắn bất kỳ câu hỏi nào, mình sẽ giải đáp chu đáo.\n"
-        "🎨 **2. Tạo ảnh nghệ thuật:** Dùng lệnh `/image <mô tả>` hoặc nhắn tự nhiên *'vẽ một chú mèo...'* để mình vẽ tranh cho bạn.\n\n"
+        "Mình là **AI Agent tự chủ (Autonomous ReAct Agent)** được trang bị đầy đủ công cụ làm việc:\n\n"
+        "🔍 **1. Tìm kiếm web thời gian thực (`web_search`):** Cập nhật tin tức, thời tiết, giá cả hôm nay.\n"
+        "📖 **2. Đọc & tóm tắt trang web (`read_webpage`):** Gửi link URL để mình đọc và trích xuất nội dung.\n"
+        "🎨 **3. Vẽ tranh nghệ thuật (`generate_image`):** Tạo ảnh Flux 1024x1024 theo mọi mô tả.\n"
+        "🧮 **4. Tính toán chính xác (`calculate`):** Xử lý các phép tính toán học phức tạp.\n"
+        "⏱️ **5. Thời gian thực tế (`get_current_time`):** Kiểm tra ngày giờ hiện tại ở Việt Nam.\n\n"
         "📌 **Các lệnh hữu ích:**\n"
-        "• `/auth <mật_khẩu>` - Xác thực quyền truy cập riêng tư\n"
-        "• `/help` - Xem hướng dẫn chi tiết\n"
-        "• `/image <mô tả>` - Vẽ ảnh bằng AI\n"
-        "• `/models` - Xem danh sách model AI & cơ chế Fallback\n"
-        "• `/status` - Xem trạng thái hệ thống & Uptime 24/7\n"
-        "• `/clear` - Làm mới ngữ cảnh trò chuyện\n\n"
-        "Hãy thử đặt cho mình một câu hỏi hoặc bảo mình vẽ một bức tranh nhé! ✨"
+        "• `/auth <mật_khẩu>` - Kích hoạt quyền truy cập bot\n"
+        "• `/help` - Xem tài liệu & ví dụ chi tiết\n"
+        "• `/image <mô tả>` - Vẽ ảnh trực tiếp bằng Flux\n"
+        "• `/models` - Xem danh sách AI Model & Fallback\n"
+        "• `/status` - Uptime & trạng thái Agent\n"
+        "• `/clear` - Làm mới ngữ cảnh hội thoại\n\n"
+        "Bạn hãy thử nhắn một câu hỏi hoặc yêu cầu bất kỳ cho mình nhé! ✨"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "📚 **HƯỚNG DẪN SỬ DỤNG AIRI SENSEI**\n\n"
+        "📚 **HƯỚNG DẪN SỬ DỤNG AI AGENT AIRI SENSEI**\n\n"
         "🔐 **Xác thực quyền riêng tư:**\n"
-        "• Gõ `/auth <mật_khẩu>` để kích hoạt quyền chat.\n\n"
-        "🔹 **Trò chuyện & Hỏi đáp:**\n"
-        "Chỉ cần gõ tin nhắn trực tiếp gửi cho bot. Ví dụ:\n"
-        "• *'Giải thích sự khác nhau giữa Webhook và Polling?'*\n"
-        "• *'Viết giúp mình hàm Python đảo ngược chuỗi.'*\n\n"
-        "🔹 **Vẽ tranh AI:**\n"
-        "Cách 1: Gõ lệnh `/image <mô tả>` (ví dụ: `/image chú mèo lông xù`)\n"
-        "Cách 2: Nhắn tự nhiên: *'vẽ con mèo'* hoặc *'tạo ảnh hoàng hôn trên biển 4k'*\n\n"
-        "🔹 **Các lệnh quản trị:**\n"
-        "• `/clear`: Xóa lịch sử nhớ để bắt đầu cuộc trò chuyện mới\n"
-        "• `/models`: Xem danh sách các AI model đang kích hoạt\n"
-        "• `/status`: Kiểm tra độ trễ mạng và Uptime của server"
+        "• Gõ `/auth <mật_khẩu>` để kích hoạt quyền truy cập.\n\n"
+        "🤖 **Khả năng tự chủ của Airi Agent:**\n"
+        "Bạn chỉ cần nhắn tin tự nhiên, Airi sẽ tự động suy nghĩ và chọn công cụ phù hợp:\n\n"
+        "• 🔍 *'Tin tức công nghệ mới nhất hôm nay có gì hot?'* → Airi tìm kiếm trên web.\n"
+        "• 📖 *'Đọc giúp mình trang web https://vnexpress.net và tóm tắt.'* → Airi cào và đọc dữ liệu.\n"
+        "• 🧮 *'Tính (450 * 12) + (3500 / 7) giúp mình'* → Airi tính toán số học chuẩn xác.\n"
+        "• ⏱️ *'Hôm nay là thứ mấy và mấy giờ rồi?'* → Airi kiểm tra giờ Việt Nam.\n"
+        "• 🎨 *'Vẽ cho mình một chú mèo phi hành gia trong dải ngân hà'* → Airi tự vẽ và gửi ảnh.\n\n"
+        "🔹 **Lệnh tạo ảnh trực tiếp:**\n"
+        "• `/image <mô tả>` (Ví dụ: `/image phong cảnh Đà Lạt mộng mơ lúc hoàng hôn anime 4k`)\n\n"
+        "🔹 **Quản trị hệ thống:**\n"
+        "• `/clear`: Xóa lịch sử nhớ để bắt đầu chủ đề mới\n"
+        "• `/models`: Xem các model AI và cơ chế dự phòng\n"
+        "• `/status`: Kiểm tra độ trễ mạng và Uptime server 24/7"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
@@ -142,12 +152,12 @@ async def models_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     fallback_list = ", ".join(settings.fallback_models_list)
     or_free_list = ", ".join(settings.openrouter_free_models_list)
     text = (
-        "🤖 **CẤU HÌNH AI MODELS & CƠ CHẾ CASCADING FALLBACK**\n\n"
-        f"🥇 **OpenRouter Free Models:** `{or_free_list}`\n"
+        "🤖 **CẤU HÌNH AI AGENT MODELS & CASCADING FALLBACK**\n\n"
+        f"🥇 **OpenRouter Free Tier:** `{or_free_list}`\n"
         f"🥈 **B.AI Models:** `{settings.AI_PRIMARY_MODEL}`, `{fallback_list}`\n"
-        f"🌸 **Free Fallback:** `Airi-Flash` (GPT Reasoning Engine)\n"
-        f"🎨 **Engine sinh ảnh:** `{settings.IMAGE_MODEL}` (Flux 1024x1024)\n\n"
-        "💡 *Cơ chế:* Tự động luân chuyển model khi gặp lỗi quota hoặc nghẽn mạng!"
+        f"🌸 **Zero-Failure Fallback:** `openai-fast` (Pollinations GPT-OSS 20B)\n"
+        f"🎨 **Image Engine:** `{settings.IMAGE_MODEL}` (Flux 1024x1024)\n\n"
+        "💡 *Cơ chế:* Tự động luân chuyển model thông minh khi gặp lỗi quota hoặc nghẽn mạng!"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
@@ -164,9 +174,11 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     text = (
         "⚡ **TRẠNG THÁI HỆ THỐNG AIRI SENSEI**\n\n"
         f"🟢 **Trạng thái:** Online 24/7 (Render Web Service)\n"
+        f"🤖 **Chế độ hoạt động:** Autonomous AI Agent (ReAct Loop + Tools)\n"
         f"⏱️ **Thời gian hoạt động (Uptime):** {uptime_str}\n"
         f"🔐 **Chế độ bảo vệ:** {'Bật (Private Whitelist)' if settings.AUTH_ENABLED else 'Mở (Public)'}\n"
         f"👤 **Tài khoản của bạn:** {'Đã cấp quyền ✅' if is_auth else 'Chưa cấp quyền ❌'}\n"
+        f"🛠️ **Công cụ tích hợp:** Web Search, Read Webpage, Calculator, VN Time, Image Gen\n"
         f"🎨 **Image Engine:** `{settings.IMAGE_MODEL}` (Flux)\n"
         f"🌐 **HTTP Health Server:** Port `{settings.PORT}` OK"
     )
@@ -179,7 +191,10 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     user_id = update.effective_user.id
     chat_service.clear_history(user_id)
-    await update.message.reply_text("🧹 Mình đã làm mới bộ nhớ trò chuyện rồi! Chúng ta bắt đầu chủ đề mới nhé! ✨")
+    airi_agent.clear_history(user_id)
+    await update.message.reply_text(
+        "🧹 Mình đã làm mới bộ nhớ trò chuyện và ngữ cảnh Agent rồi! Chúng ta bắt đầu nhiệm vụ mới nhé! ✨"
+    )
 
 
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -190,7 +205,7 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(
             "🎨 Bạn hãy nhập mô tả tranh muốn vẽ nhé!\n\n"
             "👉 *Ví dụ:* `/image một chú mèo phi hành gia bay ngoài vũ trụ phong cách anime 4k`",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
         return
 
@@ -200,7 +215,10 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def _execute_image_generation(update: Update, prompt: str) -> None:
     cleaned = clean_prompt(prompt)
-    status_msg = await update.message.reply_text("🎨 *Airi đang vẽ tranh cho bạn, đợi xíu nhé...*", parse_mode=ParseMode.MARKDOWN)
+    status_msg = await update.message.reply_text(
+        "🎨 *Airi đang vẽ tranh cho bạn, đợi xíu nhé...*",
+        parse_mode=ParseMode.MARKDOWN,
+    )
     await update.message.reply_chat_action(ChatAction.UPLOAD_PHOTO)
 
     try:
@@ -210,7 +228,7 @@ async def _execute_image_generation(update: Update, prompt: str) -> None:
         await update.message.reply_photo(
             photo=io.BytesIO(image_bytes),
             caption=caption[:1024],
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         logger.error("Error generating image: %s", e)
@@ -226,25 +244,71 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     if not await check_authorization(update):
         return
 
-    # 1. Kiểm tra nếu người dùng nói ý định vẽ ảnh
-    detected_prompt = detect_image_prompt(user_message)
-    if detected_prompt:
-        logger.info("Detected image generation intent: '%s'", detected_prompt)
-        await _execute_image_generation(update, detected_prompt)
-        return
-
-    # 2. Xử lý câu hỏi thông thường qua AI Chat
     user_id = update.effective_user.id
     await update.message.reply_chat_action(ChatAction.TYPING)
 
+    status_msg = None
+
+    async def on_agent_status(status_text: str):
+        nonlocal status_msg
+        try:
+            if status_msg is None:
+                status_msg = await update.message.reply_text(status_text)
+            else:
+                await status_msg.edit_text(status_text)
+        except Exception as err:
+            logger.debug("Could not update status message: %s", err)
+
     try:
-        reply, model_used = await chat_service.ask(user_id, user_message)
-        footer = f"\n\n_— Airi Sensei ({model_used})_"
-        full_reply = reply + footer
+        result = await airi_agent.run(
+            user_id=user_id,
+            user_input=user_message,
+            on_status_update=on_agent_status,
+        )
+
+        # Xóa tin nhắn trạng thái trung gian nếu có
+        if status_msg:
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+
+        # 1. Gửi ảnh nếu agent đã sinh ảnh trong quá trình thực thi
+        for img_bytes, prompt_desc in result.images:
+            cleaned = clean_prompt(prompt_desc)
+            caption = f"🎨 **Tranh tạo bởi Airi:**\n_{cleaned}_\n\n*(Engine: {settings.IMAGE_MODEL})*"
+            await update.message.reply_photo(
+                photo=io.BytesIO(img_bytes),
+                caption=caption[:1024],
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        # 2. Gửi câu trả lời bằng văn bản
+        text_reply = result.text.strip()
+        if not text_reply and result.images:
+            text_reply = "Airi đã vẽ xong tranh cho bạn rồi đây! ✨"
+
+        # Hiển thị các tool đã sử dụng nếu có
+        if result.tools_used:
+            unique_tools = list(dict.fromkeys(result.tools_used))
+            tools_str = ", ".join(unique_tools)
+            footer = f"\n\n_— Airi Agent ⚡ [{tools_str}]_"
+        else:
+            footer = "\n\n_— Airi Sensei 🌸_"
+
+        full_reply = text_reply + footer
         try:
             await update.message.reply_text(full_reply, parse_mode=ParseMode.MARKDOWN)
         except Exception:
             await update.message.reply_text(full_reply)
+
     except Exception as e:
         logger.error("Error in text handler: %s", e)
-        await update.message.reply_text(f"Dạ có lỗi nhỏ xảy ra: {e}. Bạn hỏi lại nhé!")
+        if status_msg:
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+        await update.message.reply_text(
+            f"Dạ có lỗi nhỏ xảy ra khi Airi xử lý: {e}. Bạn thử lại nhé!"
+        )

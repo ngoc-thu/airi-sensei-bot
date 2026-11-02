@@ -13,11 +13,16 @@ class Settings(BaseSettings):
     # Telegram
     BOT_TOKEN: str
 
-    # AI Configuration
+    # AI Configuration (B.AI / OpenAI compatible)
     AI_BASE_URL: str = "https://api.b.ai/v1"
     AI_API_KEY: str = ""
     AI_PRIMARY_MODEL: str = "deepseek-v4.1-flash"
     AI_FALLBACK_MODELS: str = "qwen3.8-flash,glm-5.3-flash,minimax-m3.1-flash"
+
+    # OpenRouter Free Tier
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_FREE_MODELS: str = "google/gemma-4-31b-it:free,nvidia/nemotron-3.5-lightning:free,google/gemma-4-26b-a4b-it:free"
 
     # Image Generation
     IMAGE_MODEL: str = "flux"
@@ -34,6 +39,12 @@ class Settings(BaseSettings):
         if not self.AI_FALLBACK_MODELS:
             return []
         return [m.strip() for m in self.AI_FALLBACK_MODELS.split(",") if m.strip()]
+
+    @property
+    def openrouter_free_models_list(self) -> List[str]:
+        if not self.OPENROUTER_FREE_MODELS:
+            return []
+        return [m.strip() for m in self.OPENROUTER_FREE_MODELS.split(",") if m.strip()]
 
 
 @lru_cache()

@@ -17,16 +17,26 @@ class ChatService:
     def __init__(self, settings: Settings = None):
         self.settings = settings or get_settings()
         self.history: Dict[int, List[Dict[str, str]]] = {}
-        self._client: AsyncOpenAI = None
+        self._bai_client: AsyncOpenAI = None
+        self._openrouter_client: AsyncOpenAI = None
 
-    def _get_client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client = AsyncOpenAI(
+    def _get_bai_client(self) -> AsyncOpenAI:
+        if self._bai_client is None:
+            self._bai_client = AsyncOpenAI(
                 base_url=self.settings.AI_BASE_URL,
                 api_key=self.settings.AI_API_KEY or "none",
-                timeout=30.0,
+                timeout=25.0,
             )
-        return self._client
+        return self._bai_client
+
+    def _get_openrouter_client(self) -> AsyncOpenAI:
+        if self._openrouter_client is None and self.settings.OPENROUTER_API_KEY:
+            self._openrouter_client = AsyncOpenAI(
+                base_url=self.settings.OPENROUTER_BASE_URL,
+                api_key=self.settings.OPENROUTER_API_KEY,
+                timeout=25.0,
+            )
+        return self._openrouter_client
 
     def clear_history(self, user_id: int) -> None:
         if user_id in self.history:
@@ -40,8 +50,11 @@ class ChatService:
 
     async def ask(self, user_id: int, message: str) -> Tuple[str, str]:
         """
-        Gửi prompt qua danh sách model với cơ chế Cascading Fallback.
-        Trả về (câu_trả_lời, model_được_dùng).
+        Gửi prompt qua chuỗi model phân tầng:
+        1. OpenRouter (các model hoàn toàn miễn phí ':free') nếu có key.
+        2. B.AI (nếu có key & còn quota).
+        3. Pollinations Free AI Engine ('openai-fast' - 100% free, 0 key).
+        4. Safe Persona Fallback.
         """
         user_history = self._get_user_history(user_id)
         user_history.append({"role": "user", "content": message})
@@ -53,42 +66,57 @@ class ChatService:
 
         messages = [{"role": "system", "content": AIRI_SYSTEM_PROMPT}] + user_history
 
-        # 1. Dàn model chính & fallback từ B.AI
-        candidate_models = [self.settings.AI_PRIMARY_MODEL] + self.settings.fallback_models_list
+        # 1. Thử OpenRouter Free Models (nếu có OPENROUTER_API_KEY)
+        openrouter_client = self._get_openrouter_client()
+        if openrouter_client:
+            for model in self.settings.openrouter_free_models_list:
+                try:
+                    logger.info("Trying OpenRouter Free model: %s", model)
+                    response = await openrouter_client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        max_tokens=1500,
+                        temperature=0.7,
+                    )
+                    if response.choices and response.choices[0].message.content:
+                        reply = response.choices[0].message.content.strip()
+                        user_history.append({"role": "assistant", "content": reply})
+                        logger.info("Got response from OpenRouter model: %s", model)
+                        return reply, model.split("/")[-1].replace(":free", "")
+                except Exception as e:
+                    logger.warning("OpenRouter model %s failed: %s. Trying next...", model, e)
 
-        client = self._get_client()
+        # 2. Thử B.AI Models (nếu có AI_API_KEY)
+        if self.settings.AI_API_KEY:
+            bai_models = [self.settings.AI_PRIMARY_MODEL] + self.settings.fallback_models_list
+            bai_client = self._get_bai_client()
+            for model in bai_models:
+                try:
+                    logger.info("Trying B.AI model: %s", model)
+                    response = await bai_client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        max_tokens=1500,
+                        temperature=0.7,
+                    )
+                    if response.choices and response.choices[0].message.content:
+                        reply = response.choices[0].message.content.strip()
+                        user_history.append({"role": "assistant", "content": reply})
+                        logger.info("Got response from B.AI model: %s", model)
+                        return reply, model
+                except Exception as e:
+                    logger.warning("B.AI model %s failed: %s. Trying next...", model, e)
 
-        for model in candidate_models:
-            try:
-                logger.info("Trying model: %s for user %s", model, user_id)
-                response = await client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=1500,
-                    temperature=0.7,
-                )
-                if response.choices and response.choices[0].message.content:
-                    reply = response.choices[0].message.content.strip()
-                    user_history.append({"role": "assistant", "content": reply})
-                    logger.info("Successfully got response from model: %s", model)
-                    return reply, model
-            except Exception as e:
-                logger.warning(
-                    "Model %s failed with error: %s. Switching to next fallback...",
-                    model,
-                    e
-                )
-
-        # 2. Thử Free Fallback Provider (Pollinations AI text engine - hoàn toàn miễn phí, 0 key)
+        # 3. Thử Free AI Engine (Pollinations 'openai-fast' - 100% miễn phí, 0 key)
         try:
-            logger.info("Attempting free fallback provider (Pollinations AI)...")
+            logger.info("Trying Pollinations Free AI Engine (openai-fast)...")
             free_client = AsyncOpenAI(
                 base_url="https://text.pollinations.ai/openai",
                 api_key="none",
                 timeout=25.0
             )
             free_response = await free_client.chat.completions.create(
-                model="openai",
+                model="openai-fast",
                 messages=messages,
                 max_tokens=1500,
                 temperature=0.7,
@@ -96,18 +124,17 @@ class ChatService:
             if free_response.choices and free_response.choices[0].message.content:
                 reply = free_response.choices[0].message.content.strip()
                 user_history.append({"role": "assistant", "content": reply})
-                logger.info("Successfully got response from free fallback provider!")
+                logger.info("Got response from Pollinations Free AI Engine!")
                 return reply, "Airi-Flash"
         except Exception as free_err:
-            logger.warning("Free fallback provider failed: %s", free_err)
+            logger.warning("Pollinations Free AI Engine failed: %s", free_err)
 
-        # 3. Fallback an toàn nếu tất cả các model đều gặp sự cố
-        logger.error("All AI models in cascade failed. Returning graceful fallback.")
+        # 4. Fallback an toàn nếu toàn bộ mạng/engine gặp sự cố
+        logger.error("All AI models in cascade failed.")
         fallback_reply = (
             f"Chào bạn, mình là **Airi Sensei**! 🌸\n\n"
             f"Mình đã nhận được câu hỏi của bạn: *\"{message}\"*\n\n"
-            f"Hiện tại kết nối AI đang bận hoặc đang được nâng cấp hạn ngạch (quota). "
-            f"Bạn hãy thử lại sau giây lát nhé! Trong lúc đó bạn có thể dùng lệnh `/image <mô tả>` "
-            f"để vẽ tranh nhé!"
+            f"Hiện tại kết nối AI đang bận hoặc đang bảo trì một chút. "
+            f"Bạn hãy thử lại sau giây lát nhé!"
         )
         return fallback_reply, "fallback-persona"

@@ -241,12 +241,12 @@ class AiriAgent:
         successful_model = ""
 
         models_to_try: List[str] = []
-        # Tier 1: Groq Cloud (14.4k RPD / ultra-fast)
-        if self.settings.GROQ_API_KEY and self.settings.groq_models_list:
-            models_to_try.extend(self.settings.groq_models_list)
-        # Tier 2: Google Gemini (1.5k RPD / 1M context / high reasoning)
+        # Tier 1: Google Gemini (Ưu tiên số 1 theo yêu cầu: 1M context / lý luận cao)
         if self.settings.GEMINI_API_KEY and self.settings.gemini_models_list:
             models_to_try.extend(self.settings.gemini_models_list)
+        # Tier 2: Groq Cloud (Dự phòng siêu tốc 500 T/s khi Gemini lỗi)
+        if self.settings.GROQ_API_KEY and self.settings.groq_models_list:
+            models_to_try.extend(self.settings.groq_models_list)
         # Tier 3: OpenRouter Free Models
         if self.settings.OPENROUTER_API_KEY and self.settings.openrouter_free_models_list:
             models_to_try.extend(self.settings.openrouter_free_models_list)

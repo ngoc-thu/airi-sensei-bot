@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # OpenRouter Free Tier
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    OPENROUTER_FREE_MODELS: str = "google/gemma-4-31b-it:free,nvidia/nemotron-3.5-lightning:free,google/gemma-4-26b-a4b-it:free"
+    OPENROUTER_FREE_MODELS: str = "cohere/north-mini-code:free,google/gemma-4-31b-it:free,nvidia/nemotron-3.5-lightning:free"
 
     # Image Generation
     IMAGE_MODEL: str = "flux"

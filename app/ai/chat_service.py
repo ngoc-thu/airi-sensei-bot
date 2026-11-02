@@ -78,8 +78,12 @@ class ChatService:
                         max_tokens=1500,
                         temperature=0.7,
                     )
-                    if response.choices and response.choices[0].message.content:
-                        reply = response.choices[0].message.content.strip()
+                    msg = response.choices[0].message
+                    reply = msg.content
+                    if not reply and hasattr(msg, "reasoning") and msg.reasoning:
+                        reply = msg.reasoning
+                    if reply and reply.strip():
+                        reply = reply.strip()
                         user_history.append({"role": "assistant", "content": reply})
                         logger.info("Got response from OpenRouter model: %s", model)
                         return reply, model.split("/")[-1].replace(":free", "")

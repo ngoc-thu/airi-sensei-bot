@@ -12,6 +12,7 @@ def test_settings_load_defaults():
         assert settings.AI_BASE_URL == "https://api.b.ai/v1"
         assert settings.AI_PRIMARY_MODEL == "deepseek-v4.1-flash"
         assert "qwen3.8-flash" in settings.fallback_models_list
+        assert "llama-3.3-70b-versatile" in settings.groq_models_list
         assert settings.PORT == 8080
         assert settings.IMAGE_MODEL == "flux"
 

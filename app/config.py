@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     AUTH_PASSCODE: str = "airi2026"
     ALLOWED_USER_IDS: str = "5556841083"
 
+    # Groq Cloud (Free 14,400 RPD, ultra-fast 500 T/s, native tool calling)
+    GROQ_API_KEY: str = ""
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_MODELS: str = "llama-3.3-70b-versatile,llama-3.1-8b-instant"
+
     # OpenRouter Free Tier
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
@@ -51,6 +56,12 @@ class Settings(BaseSettings):
             if cleaned.isdigit():
                 ids.append(int(cleaned))
         return ids
+
+    @property
+    def groq_models_list(self) -> List[str]:
+        if not self.GROQ_MODELS:
+            return []
+        return [m.strip() for m in self.GROQ_MODELS.split(",") if m.strip()]
 
     @property
     def fallback_models_list(self) -> List[str]:

@@ -149,12 +149,14 @@ async def models_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not await check_authorization(update):
         return
 
+    groq_list = ", ".join(settings.groq_models_list) if settings.GROQ_API_KEY else "Chưa kích hoạt"
     fallback_list = ", ".join(settings.fallback_models_list)
     or_free_list = ", ".join(settings.openrouter_free_models_list)
     text = (
         "🤖 **CẤU HÌNH AI AGENT MODELS & CASCADING FALLBACK**\n\n"
-        f"🥇 **OpenRouter Free Tier:** `{or_free_list}`\n"
-        f"🥈 **B.AI Models:** `{settings.AI_PRIMARY_MODEL}`, `{fallback_list}`\n"
+        f"⚡ **Groq Cloud (14.4k RPD / Ultra-fast):** `{groq_list}`\n"
+        f"🥈 **OpenRouter Free Tier:** `{or_free_list}`\n"
+        f"🥉 **B.AI Models:** `{settings.AI_PRIMARY_MODEL}`, `{fallback_list}`\n"
         f"🌸 **Zero-Failure Fallback:** `openai-fast` (Pollinations GPT-OSS 20B)\n"
         f"🎨 **Image Engine:** `{settings.IMAGE_MODEL}` (Flux 1024x1024)\n\n"
         "💡 *Cơ chế:* Tự động luân chuyển model thông minh khi gặp lỗi quota hoặc nghẽn mạng!"
@@ -289,13 +291,37 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         if not text_reply and result.images:
             text_reply = "Airi đã vẽ xong tranh cho bạn rồi đây! ✨"
 
-        # Hiển thị các tool đã sử dụng nếu có
-        if result.tools_used:
+        # Hiển thị nhật ký hành động (Agent Action Trace) nếu có công cụ được gọi
+        if getattr(result, "steps", None):
+            trace_lines = []
+            tool_icons = {
+                "web_search": "🔍",
+                "read_webpage": "📖",
+                "generate_image": "🎨",
+                "calculate": "🧮",
+                "get_current_time": "⏱️",
+                "remember_user_fact": "🧠",
+                "manage_notes": "📝",
+                "set_reminder": "⏰",
+            }
+            for st in result.steps:
+                icon = tool_icons.get(st.tool_name, "⚙️")
+                trace_lines.append(f"• {icon} *{st.tool_name}*: {st.summary} `({st.elapsed_seconds}s)`")
+            trace_block = "\n".join(trace_lines)
+            model_info = f" ({result.model_used})" if result.model_used else ""
+            footer = (
+                f"\n\n────────────────────\n"
+                f"🤖 **Nhật ký hành động (Agent Trace):**\n{trace_block}\n"
+                f"⚡ _Airi Agent{model_info}_"
+            )
+        elif result.tools_used:
             unique_tools = list(dict.fromkeys(result.tools_used))
             tools_str = ", ".join(unique_tools)
-            footer = f"\n\n_— Airi Agent ⚡ [{tools_str}]_"
+            model_info = f" ({result.model_used})" if result.model_used else ""
+            footer = f"\n\n_— Airi Agent ⚡ [{tools_str}]{model_info}_"
         else:
-            footer = "\n\n_— Airi Sensei 🌸_"
+            model_info = f" ({result.model_used})" if result.model_used else ""
+            footer = f"\n\n_— Airi Sensei ✨{model_info}_"
 
         full_reply = text_reply + footer
         try:

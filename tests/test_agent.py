@@ -79,4 +79,18 @@ async def test_agent_openclaw_tools_execution(mock_settings, tmp_path):
         res = await agent.run(user_id=5556841083, user_input="Từ giờ gọi anh là anh yêu nha")
         assert "anh yêu" in res.text
         assert "remember_user_fact" in res.tools_used
+        assert len(res.steps) == 1
+        assert res.steps[0].tool_name == "remember_user_fact"
         assert mem.get_facts(5556841083)["tên_gọi"] == "anh yêu"
+
+
+def test_agent_groq_client_creation():
+    settings = Settings(
+        BOT_TOKEN="mock_token",
+        GROQ_API_KEY="gsk_test123",
+        GROQ_BASE_URL="https://api.groq.com/openai/v1",
+        GROQ_MODELS="llama-3.3-70b-versatile",
+    )
+    agent = AiriAgent(settings=settings)
+    client = agent._create_client_for_model("llama-3.3-70b-versatile")
+    assert "api.groq.com" in str(client.base_url)

@@ -33,13 +33,22 @@ AGENT_SYSTEM_PROMPT = (
     "3. `generate_image`: Tạo ảnh, vẽ tranh nghệ thuật khi người dùng yêu cầu vẽ tranh hoặc minh họa.\n"
     "4. `calculate`: Tính toán công thức toán học, biểu thức tài chính, số học chính xác tuyệt đối.\n"
     "5. `get_current_time`: Lấy ngày giờ hiện tại ở Việt Nam (GMT+7).\n"
-    "6. `remember_user_fact`: Ghi nhớ thông tin quan trọng hoặc cách xưng hô của người dùng vào trí nhớ dài hạn.\n"
+    "6. `remember_user_fact`: Ghi nhớ thông tin quan trọng hoặc cách xưng hô của người dùng vào trí nhớ dài hạn. "
+    "KHI NGƯỜI DÙNG BẢO ĐỔI CÁCH XƯNG HÔ HOẶC TIẾT LỘ TÊN, SỞ THÍCH: Hãy gọi ngay công cụ này để lưu lại!\n"
     "7. `manage_notes`: Quản lý sổ tay ghi chú cá nhân (lưu, xem danh sách, xóa).\n"
     "8. `set_reminder`: Đặt lịch hẹn giờ nhắc nhở người dùng sau một số phút.\n\n"
     "Nguyên tắc làm việc của Agent:\n"
-    "- Chỉ gọi Tool khi người dùng thực sự yêu cầu thông tin cần tra cứu, đọc link, vẽ tranh, tính toán hay hỏi giờ.\n"
+    "- Tự chủ, minh bạch: Sử dụng công cụ thích hợp khi người dùng yêu cầu.\n"
     "- Sau khi nhận kết quả từ Tool, tổng hợp câu trả lời chu đáo, ấm áp, thân thiện bằng tiếng Việt."
 )
+
+
+@dataclass
+class AgentStep:
+    tool_name: str
+    arguments: Dict[str, Any]
+    summary: str
+    elapsed_seconds: float = 0.0
 
 
 @dataclass
@@ -47,6 +56,8 @@ class AgentResult:
     text: str
     images: List[Tuple[bytes, str]] = field(default_factory=list)
     tools_used: List[str] = field(default_factory=list)
+    steps: List[AgentStep] = field(default_factory=list)
+    model_used: str = ""
 
 
 class AiriAgent:
@@ -65,6 +76,12 @@ class AiriAgent:
         return self._create_client_for_model(model)
 
     def _create_client_for_model(self, model: str = "") -> AsyncOpenAI:
+        if self.settings.GROQ_API_KEY and model in self.settings.groq_models_list:
+            return AsyncOpenAI(
+                base_url=self.settings.GROQ_BASE_URL,
+                api_key=self.settings.GROQ_API_KEY,
+                timeout=25.0,
+            )
         if model == "openai-fast":
             return AsyncOpenAI(
                 base_url="https://text.pollinations.ai/openai",
@@ -100,46 +117,54 @@ class AiriAgent:
         arguments: Dict[str, Any],
         images_collected: List[Tuple[bytes, str]],
         user_id: int = 0,
-    ) -> str:
+    ) -> Tuple[str, str]:
         """
-        Thực thi tool theo tên và tham số truyền vào
+        Thực thi tool theo tên và tham số truyền vào, trả về (output_str, summary_str)
         """
         logger.info("Agent executing tool: %s with args: %s for user: %s", tool_name, arguments, user_id)
 
         if tool_name == "web_search":
             query = arguments.get("query", "")
-            return await web_search(query)
+            res = await web_search(query)
+            return res, f"Đã tra cứu dữ liệu web cho '{query[:35]}'"
 
         elif tool_name == "read_webpage":
             url = arguments.get("url", "")
-            return await read_webpage(url)
+            res = await read_webpage(url)
+            return res, f"Đã đọc bài viết: {url[:30]}..."
 
         elif tool_name == "calculate":
             expr = arguments.get("expression", "")
-            return safe_calculate(expr)
+            res = safe_calculate(expr)
+            return res, f"Tính toán: {expr} = {res}"
 
         elif tool_name == "get_current_time":
-            return get_vietnam_time()
+            res = get_vietnam_time()
+            return res, f"Thời gian GMT+7: {res}"
 
         elif tool_name == "generate_image":
             prompt = arguments.get("prompt", "")
             try:
                 img_bytes, model_used = await self.image_service.generate_image(prompt)
                 images_collected.append((img_bytes, prompt))
-                return (
+                msg = (
                     f"Đã vẽ xong tranh thành công theo mô tả: '{prompt}' (Model: {model_used}). "
                     "Ảnh đã được sẵn sàng gửi đến người dùng."
                 )
+                return msg, f"Đã tạo ảnh nghệ thuật: '{prompt[:30]}...'"
             except Exception as e:
-                return f"Lỗi vẽ tranh: {e}"
+                return f"Lỗi vẽ tranh: {e}", f"Lỗi tạo ảnh: {e}"
 
         elif tool_name == "remember_user_fact":
             key = arguments.get("key", "").strip()
             val = arguments.get("value", "").strip()
             if key and val:
                 self.memory_service.save_fact(user_id, key, val)
-                return f"Airi đã ghi nhớ vào trí nhớ dài hạn: {key} = {val}."
-            return "Không thể lưu thông tin (thiếu key hoặc value)."
+                return (
+                    f"Airi đã ghi nhớ vào trí nhớ dài hạn: {key} = {val}.",
+                    f"Đã ghi nhớ: {key} = '{val}'",
+                )
+            return "Không thể lưu thông tin (thiếu key hoặc value).", "Thiếu key/value để nhớ"
 
         elif tool_name == "manage_notes":
             action = arguments.get("action", "list")
@@ -147,26 +172,35 @@ class AiriAgent:
                 title = arguments.get("title", "Ghi chú").strip()
                 content = arguments.get("content", "").strip()
                 nid = self.memory_service.save_note(user_id, title, content)
-                return f"Đã lưu ghi chú #{nid} ('{title}') vào sổ tay cá nhân của bạn."
+                return (
+                    f"Đã lưu ghi chú #{nid} ('{title}') vào sổ tay cá nhân của bạn.",
+                    f"Đã lưu ghi chú #{nid} ('{title}')",
+                )
             elif action == "list":
                 notes = self.memory_service.get_notes(user_id)
                 if not notes:
-                    return "Sổ tay của bạn hiện chưa có ghi chú nào."
+                    return "Sổ tay của bạn hiện chưa có ghi chú nào.", "Sổ tay trống"
                 lines = [f"#{n['id']}. **{n['title']}**: {n['content']}" for n in notes]
-                return "Sổ tay ghi chú của bạn:\n" + "\n".join(lines)
+                return "Sổ tay ghi chú của bạn:\n" + "\n".join(lines), f"Đã xem {len(notes)} ghi chú"
             elif action == "delete":
                 nid = int(arguments.get("note_id", 0))
                 ok = self.memory_service.delete_note(user_id, nid)
-                return f"Đã xóa ghi chú #{nid}." if ok else f"Không tìm thấy ghi chú #{nid} để xóa."
+                return (
+                    f"Đã xóa ghi chú #{nid}." if ok else f"Không tìm thấy ghi chú #{nid} để xóa.",
+                    f"Đã xóa ghi chú #{nid}" if ok else f"Lỗi xóa ghi chú #{nid}",
+                )
 
         elif tool_name == "set_reminder":
             minutes = int(arguments.get("minutes_from_now", 15))
             msg = arguments.get("message", "Nhắc nhở").strip()
             remind_at = time.time() + (minutes * 60)
             rid = self.memory_service.add_reminder(user_id, msg, remind_at)
-            return f"Đã hẹn giờ nhắc nhở #{rid} sau {minutes} phút với nội dung: '{msg}'."
+            return (
+                f"Đã hẹn giờ nhắc nhở #{rid} sau {minutes} phút với nội dung: '{msg}'.",
+                f"Đã hẹn giờ sau {minutes} phút: '{msg[:25]}'",
+            )
 
-        return f"Công cụ '{tool_name}' không tồn tại."
+        return f"Công cụ '{tool_name}' không tồn tại.", f"Công cụ '{tool_name}' không tồn tại."
 
     async def run(
         self,
@@ -197,8 +231,12 @@ class AiriAgent:
 
         images_collected: List[Tuple[bytes, str]] = []
         tools_used: List[str] = []
+        steps_executed: List[AgentStep] = []
+        successful_model = ""
 
         models_to_try: List[str] = []
+        if self.settings.GROQ_API_KEY and self.settings.groq_models_list:
+            models_to_try.extend(self.settings.groq_models_list)
         if self.settings.OPENROUTER_API_KEY and self.settings.openrouter_free_models_list:
             models_to_try.extend(self.settings.openrouter_free_models_list)
         if self.settings.AI_API_KEY:
@@ -214,14 +252,18 @@ class AiriAgent:
                 try:
                     logger.info("Agent iteration %d, trying model: %s", iteration + 1, model)
                     client = self._get_client(model)
-                    response = await client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        tools=AGENT_TOOLS_SCHEMA,
-                        tool_choice="auto",
-                        max_tokens=1500,
-                        temperature=0.6,
-                    )
+                    call_kwargs: Dict[str, Any] = {
+                        "model": model,
+                        "messages": messages,
+                        "max_tokens": 1500,
+                        "temperature": 0.6,
+                    }
+                    if model != "openai-fast":
+                        call_kwargs["tools"] = AGENT_TOOLS_SCHEMA
+                        call_kwargs["tool_choice"] = "auto"
+
+                    response = await client.chat.completions.create(**call_kwargs)
+                    successful_model = model
                     break
                 except Exception as e:
                     logger.warning("Agent error with model %s: %s", model, e)
@@ -278,8 +320,18 @@ class AiriAgent:
                     except Exception:
                         args = {}
 
-                    tool_output = await self._execute_tool(
+                    t_start = time.time()
+                    tool_output, step_summary = await self._execute_tool(
                         func_name, args, images_collected, user_id=user_id
+                    )
+                    elapsed = time.time() - t_start
+                    steps_executed.append(
+                        AgentStep(
+                            tool_name=func_name,
+                            arguments=args,
+                            summary=step_summary,
+                            elapsed_seconds=round(elapsed, 2),
+                        )
                     )
 
                     messages.append({
@@ -300,10 +352,22 @@ class AiriAgent:
 
             # Lưu câu trả lời của Airi vào cơ sở dữ liệu SQLite
             self.memory_service.add_message(user_id, "assistant", final_text)
-            return AgentResult(text=final_text, images=images_collected, tools_used=tools_used)
+            return AgentResult(
+                text=final_text,
+                images=images_collected,
+                tools_used=tools_used,
+                steps=steps_executed,
+                model_used=successful_model,
+            )
 
         fallback_msg = "Airi đã hoàn thành xử lý yêu cầu của bạn."
         if images_collected:
             fallback_msg = "Airi đã vẽ xong tranh cho bạn rồi đây! ✨"
         self.memory_service.add_message(user_id, "assistant", fallback_msg)
-        return AgentResult(text=fallback_msg, images=images_collected, tools_used=tools_used)
+        return AgentResult(
+            text=fallback_msg,
+            images=images_collected,
+            tools_used=tools_used,
+            steps=steps_executed,
+            model_used=successful_model,
+        )

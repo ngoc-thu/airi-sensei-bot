@@ -23,10 +23,7 @@ async def main():
     logger = logging.getLogger("app.main")
     logger.info("Initializing Airi Sensei Telegram Bot & HTTP Server...")
 
-    # 1. Build Bot Application
-    bot_app = build_bot_app(settings)
-
-    # 2. Build Web Application
+    # 1. Start HTTP Health Server FIRST so Render health check succeeds immediately
     web_app = create_web_app(settings)
     runner = web.AppRunner(web_app)
     await runner.setup()
@@ -34,28 +31,34 @@ async def main():
     await site.start()
     logger.info("HTTP Server listening on http://%s:%d", settings.HOST, settings.PORT)
 
+    # 2. Build Bot Application
+    bot_app = build_bot_app(settings)
+
     # 3. Start Telegram Bot Polling (Async non-blocking with retry for zero-downtime deploys)
+    reminder_task = None
+
     async def start_polling_with_retry():
-        max_retries = 5
+        nonlocal reminder_task
+        max_retries = 10
         for attempt in range(1, max_retries + 1):
             try:
                 await bot_app.initialize()
                 await bot_app.start()
                 await bot_app.updater.start_polling(drop_pending_updates=True)
                 logger.info("Telegram Bot polling started successfully!")
+
+                # 4. Start Reminder Worker once bot is initialized
+                memory_service = MemoryService()
+                reminder_task = asyncio.create_task(run_reminder_loop(bot_app.bot, memory_service))
                 return
             except Exception as e:
                 logger.warning("Polling start attempt %d/%d error: %s", attempt, max_retries, e)
                 if attempt < max_retries:
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(4)
                 else:
                     logger.error("Failed to start polling after %d retries: %s", max_retries, e)
 
     polling_task = asyncio.create_task(start_polling_with_retry())
-
-    # 4. Background tasks: Keep-alive & Reminder Worker
-    memory_service = MemoryService()
-    reminder_task = asyncio.create_task(run_reminder_loop(bot_app.bot, memory_service))
 
     keep_alive_task = None
     if settings.KEEP_ALIVE_URL:

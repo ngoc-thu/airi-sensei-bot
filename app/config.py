@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # Google Gemini API (Free 1,500 RPD, 1M context, high reasoning)
     GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    GEMINI_MODELS: str = "gemini-2.5-flash,gemini-flash-latest"
+    GEMINI_MODELS: str = "gemini-3.5-flash,gemini-2.5-flash,gemini-flash-latest"
 
     # OpenRouter Free Tier
     OPENROUTER_API_KEY: str = ""

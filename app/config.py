@@ -27,12 +27,12 @@ class Settings(BaseSettings):
     # Groq Cloud (Free 14,400 RPD, ultra-fast 500 T/s, native tool calling)
     GROQ_API_KEY: str = ""
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
-    GROQ_MODELS: str = "llama-3.3-70b-versatile,llama-3.1-8b-instant"
+    GROQ_MODELS: str = "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b"
 
     # Google Gemini API (Free 1,500 RPD, 1M context, high reasoning)
     GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    GEMINI_MODELS: str = "gemini-2.0-flash,gemini-1.5-flash"
+    GEMINI_MODELS: str = "gemini-2.5-flash,gemini-flash-latest"
 
     # OpenRouter Free Tier
     OPENROUTER_API_KEY: str = ""

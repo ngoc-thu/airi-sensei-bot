@@ -89,10 +89,10 @@ def test_agent_groq_client_creation():
         BOT_TOKEN="mock_token",
         GROQ_API_KEY="gsk_test123",
         GROQ_BASE_URL="https://api.groq.com/openai/v1",
-        GROQ_MODELS="llama-3.3-70b-versatile",
+        GROQ_MODELS="openai/gpt-oss-120b",
     )
     agent = AiriAgent(settings=settings)
-    client = agent._create_client_for_model("llama-3.3-70b-versatile")
+    client = agent._create_client_for_model("openai/gpt-oss-120b")
     assert "api.groq.com" in str(client.base_url)
 
 
@@ -101,8 +101,8 @@ def test_agent_gemini_client_creation():
         BOT_TOKEN="mock_token",
         GEMINI_API_KEY="AQ.test123",
         GEMINI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/",
-        GEMINI_MODELS="gemini-2.0-flash",
+        GEMINI_MODELS="gemini-2.5-flash",
     )
     agent = AiriAgent(settings=settings)
-    client = agent._create_client_for_model("gemini-2.0-flash")
+    client = agent._create_client_for_model("gemini-2.5-flash")
     assert "generativelanguage.googleapis.com" in str(client.base_url)

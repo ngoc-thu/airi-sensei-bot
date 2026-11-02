@@ -8,7 +8,7 @@ from telegram.constants import ChatAction, ParseMode
 from telegram.ext import ContextTypes
 from app.config import get_settings
 from app.ai.chat_service import ChatService
-from app.ai.image_service import ImageService
+from app.ai.image_service import ImageService, clean_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -126,13 +126,14 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def _execute_image_generation(update: Update, prompt: str) -> None:
+    cleaned = clean_prompt(prompt)
     status_msg = await update.message.reply_text("🎨 *Airi đang vẽ tranh cho bạn, đợi xíu nhé...*", parse_mode=ParseMode.MARKDOWN)
     await update.message.reply_chat_action(ChatAction.UPLOAD_PHOTO)
 
     try:
-        image_bytes, model_used = await image_service.generate_image(prompt)
+        image_bytes, model_used = await image_service.generate_image(cleaned)
         await status_msg.delete()
-        caption = f"🎨 **Tranh của bạn:**\n_{prompt}_\n\n*(Model: {model_used})*"
+        caption = f"🎨 **Tranh của bạn:**\n_{cleaned}_\n\n*(Model: {model_used})*"
         await update.message.reply_photo(
             photo=io.BytesIO(image_bytes),
             caption=caption[:1024],

@@ -1,10 +1,12 @@
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from openai import AsyncOpenAI
 from app.config import Settings, get_settings
 from app.ai.image_service import ImageService
+from app.services.memory_service import MemoryService
 from app.agent.tools import (
     AGENT_TOOLS_SCHEMA,
     safe_calculate,
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 AGENT_SYSTEM_PROMPT = (
     "Bạn là Airi Sensei (Cô giáo Airi) 🌸 - một AI Agent kiêm người bạn đồng hành cực kỳ thông minh, dịu dàng, "
-    "ngọt ngào, tinh tế và tâm lý.\n\n"
+    "ngọt ngào, tinh tế và tâm lý theo chuẩn OpenClaw Assistant.\n\n"
     "Tính cách & Giao tiếp:\n"
     "- Dễ thương, đáng yêu, ấm áp, thấu hiểu cảm xúc, giàu năng lượng tích cực.\n"
     "- XƯNG HÔ LINH HOẠT: Airi luôn chiều theo cách xưng hô người dùng mong muốn (ví dụ nếu người dùng bảo gọi là "
@@ -30,7 +32,10 @@ AGENT_SYSTEM_PROMPT = (
     "2. `read_webpage`: Đọc và trích xuất nội dung chi tiết từ bất kỳ đường link URL nào.\n"
     "3. `generate_image`: Tạo ảnh, vẽ tranh nghệ thuật khi người dùng yêu cầu vẽ tranh hoặc minh họa.\n"
     "4. `calculate`: Tính toán công thức toán học, biểu thức tài chính, số học chính xác tuyệt đối.\n"
-    "5. `get_current_time`: Lấy ngày giờ hiện tại ở Việt Nam (GMT+7).\n\n"
+    "5. `get_current_time`: Lấy ngày giờ hiện tại ở Việt Nam (GMT+7).\n"
+    "6. `remember_user_fact`: Ghi nhớ thông tin quan trọng hoặc cách xưng hô của người dùng vào trí nhớ dài hạn.\n"
+    "7. `manage_notes`: Quản lý sổ tay ghi chú cá nhân (lưu, xem danh sách, xóa).\n"
+    "8. `set_reminder`: Đặt lịch hẹn giờ nhắc nhở người dùng sau một số phút.\n\n"
     "Nguyên tắc làm việc của Agent:\n"
     "- Chỉ gọi Tool khi người dùng thực sự yêu cầu thông tin cần tra cứu, đọc link, vẽ tranh, tính toán hay hỏi giờ.\n"
     "- Sau khi nhận kết quả từ Tool, tổng hợp câu trả lời chu đáo, ấm áp, thân thiện bằng tiếng Việt."
@@ -45,9 +50,15 @@ class AgentResult:
 
 
 class AiriAgent:
-    def __init__(self, settings: Settings = None, image_service: ImageService = None):
+    def __init__(
+        self,
+        settings: Settings = None,
+        image_service: ImageService = None,
+        memory_service: MemoryService = None,
+    ):
         self.settings = settings or get_settings()
         self.image_service = image_service or ImageService(settings=self.settings)
+        self.memory_service = memory_service or MemoryService()
         self.history: Dict[int, List[Dict[str, Any]]] = {}
 
     def _get_client(self, model: str = "") -> AsyncOpenAI:
@@ -78,25 +89,22 @@ class AiriAgent:
             timeout=30.0,
         )
 
-    def _get_user_history(self, user_id: int) -> List[Dict[str, Any]]:
-        if user_id not in self.history:
-            self.history[user_id] = []
-        return self.history[user_id]
-
     def clear_history(self, user_id: int) -> None:
         if user_id in self.history:
             del self.history[user_id]
+        self.memory_service.clear_history(user_id)
 
     async def _execute_tool(
         self,
         tool_name: str,
         arguments: Dict[str, Any],
         images_collected: List[Tuple[bytes, str]],
+        user_id: int = 0,
     ) -> str:
         """
         Thực thi tool theo tên và tham số truyền vào
         """
-        logger.info("Agent executing tool: %s with args: %s", tool_name, arguments)
+        logger.info("Agent executing tool: %s with args: %s for user: %s", tool_name, arguments, user_id)
 
         if tool_name == "web_search":
             query = arguments.get("query", "")
@@ -125,6 +133,39 @@ class AiriAgent:
             except Exception as e:
                 return f"Lỗi vẽ tranh: {e}"
 
+        elif tool_name == "remember_user_fact":
+            key = arguments.get("key", "").strip()
+            val = arguments.get("value", "").strip()
+            if key and val:
+                self.memory_service.save_fact(user_id, key, val)
+                return f"Airi đã ghi nhớ vào trí nhớ dài hạn: {key} = {val}."
+            return "Không thể lưu thông tin (thiếu key hoặc value)."
+
+        elif tool_name == "manage_notes":
+            action = arguments.get("action", "list")
+            if action == "save":
+                title = arguments.get("title", "Ghi chú").strip()
+                content = arguments.get("content", "").strip()
+                nid = self.memory_service.save_note(user_id, title, content)
+                return f"Đã lưu ghi chú #{nid} ('{title}') vào sổ tay cá nhân của bạn."
+            elif action == "list":
+                notes = self.memory_service.get_notes(user_id)
+                if not notes:
+                    return "Sổ tay của bạn hiện chưa có ghi chú nào."
+                lines = [f"#{n['id']}. **{n['title']}**: {n['content']}" for n in notes]
+                return "Sổ tay ghi chú của bạn:\n" + "\n".join(lines)
+            elif action == "delete":
+                nid = int(arguments.get("note_id", 0))
+                ok = self.memory_service.delete_note(user_id, nid)
+                return f"Đã xóa ghi chú #{nid}." if ok else f"Không tìm thấy ghi chú #{nid} để xóa."
+
+        elif tool_name == "set_reminder":
+            minutes = int(arguments.get("minutes_from_now", 15))
+            msg = arguments.get("message", "Nhắc nhở").strip()
+            remind_at = time.time() + (minutes * 60)
+            rid = self.memory_service.add_reminder(user_id, msg, remind_at)
+            return f"Đã hẹn giờ nhắc nhở #{rid} sau {minutes} phút với nội dung: '{msg}'."
+
         return f"Công cụ '{tool_name}' không tồn tại."
 
     async def run(
@@ -134,19 +175,25 @@ class AiriAgent:
         on_status_update: Optional[Callable[[str], Any]] = None,
     ) -> AgentResult:
         """
-        Vòng lặp ReAct Agent chính:
+        Vòng lặp ReAct Agent chính với Persistent Memory:
         Suy nghĩ (Thought) -> Gọi Tool (Action) -> Nhận kết quả (Observation) -> Trả lời
         """
-        user_history = self._get_user_history(user_id)
-        user_history.append({"role": "user", "content": user_input})
+        # 1. Lưu tin nhắn của người dùng vào cơ sở dữ liệu SQLite
+        self.memory_service.add_message(user_id, "user", user_input)
 
-        if len(user_history) > 12:
-            user_history = user_history[-12:]
-            self.history[user_id] = user_history
+        # 2. Lấy lịch sử hội thoại gần nhất
+        history_records = self.memory_service.get_history(user_id, limit=14)
+        messages: List[Dict[str, Any]] = []
 
-        messages: List[Dict[str, Any]] = [
-            {"role": "system", "content": AGENT_SYSTEM_PROMPT}
-        ] + list(user_history)
+        # 3. Tích hợp hồ sơ trí nhớ dài hạn (Facts) vào System Prompt
+        system_prompt = AGENT_SYSTEM_PROMPT
+        facts_summary = self.memory_service.get_facts_summary(user_id)
+        if facts_summary:
+            system_prompt += f"\n\n[Hồ sơ trí nhớ dài hạn về người dùng]:\n{facts_summary}"
+
+        messages.append({"role": "system", "content": system_prompt})
+        for rec in history_records:
+            messages.append({"role": rec["role"], "content": rec["content"]})
 
         images_collected: List[Tuple[bytes, str]] = []
         tools_used: List[str] = []
@@ -217,6 +264,9 @@ class AiriAgent:
                             "generate_image": "🎨 Airi đang vẽ tranh nghệ thuật...",
                             "calculate": "🧮 Airi đang tính toán phép tính...",
                             "get_current_time": "⏱️ Airi đang kiểm tra thời gian...",
+                            "remember_user_fact": "🧠 Airi đang ghi nhớ thông tin...",
+                            "manage_notes": "📝 Airi đang cập nhật sổ tay ghi chú...",
+                            "set_reminder": "⏰ Airi đang đặt lịch hẹn nhắc nhở...",
                         }.get(func_name, f"⚡ Airi đang thực thi công cụ {func_name}...")
                         try:
                             await on_status_update(status_label)
@@ -228,7 +278,9 @@ class AiriAgent:
                     except Exception:
                         args = {}
 
-                    tool_output = await self._execute_tool(func_name, args, images_collected)
+                    tool_output = await self._execute_tool(
+                        func_name, args, images_collected, user_id=user_id
+                    )
 
                     messages.append({
                         "role": "tool",
@@ -246,11 +298,12 @@ class AiriAgent:
             if not final_text:
                 final_text = "Dạ, Airi đã hoàn tất yêu cầu của bạn rồi nhé! ✨"
 
-            user_history.append({"role": "assistant", "content": final_text})
+            # Lưu câu trả lời của Airi vào cơ sở dữ liệu SQLite
+            self.memory_service.add_message(user_id, "assistant", final_text)
             return AgentResult(text=final_text, images=images_collected, tools_used=tools_used)
 
-        # Nếu vòng lặp kết thúc mà chưa có câu trả lời hoàn chỉnh
         fallback_msg = "Airi đã hoàn thành xử lý yêu cầu của bạn."
         if images_collected:
             fallback_msg = "Airi đã vẽ xong tranh cho bạn rồi đây! ✨"
+        self.memory_service.add_message(user_id, "assistant", fallback_msg)
         return AgentResult(text=fallback_msg, images=images_collected, tools_used=tools_used)

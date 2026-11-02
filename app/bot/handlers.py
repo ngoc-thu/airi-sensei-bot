@@ -99,48 +99,48 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_name = update.effective_user.first_name if update.effective_user else "bạn"
     user_id = update.effective_user.id
 
+    is_owner = (user_id == 5556841083) or (user_id in settings.allowed_user_ids_list)
     is_auth = auth_service.is_authorized(user_id)
-    status_tag = "🟢 *(Đã xác thực)*" if is_auth else "🔒 *(Chưa xác thực - Dùng /auth <pass>)*"
+    status_tag = "👑 *(Chủ nhân / Quản trị viên)*" if is_owner else (
+        "🟢 *(Đã xác thực)*" if is_auth else "🔒 *(Chưa xác thực - Dùng /auth <pass>)*"
+    )
 
     text = (
         f"🌸 **Chào {user_name}! Mình là Airi Sensei (@AiriSenseiBot)** 🌸\n"
         f"Trạng thái tài khoản: {status_tag}\n\n"
-        "Mình là **AI Agent tự chủ (Autonomous ReAct Agent)** được trang bị đầy đủ công cụ làm việc:\n\n"
-        "🔍 **1. Tìm kiếm web thời gian thực (`web_search`):** Cập nhật tin tức, thời tiết, giá cả hôm nay.\n"
-        "📖 **2. Đọc & tóm tắt trang web (`read_webpage`):** Gửi link URL để mình đọc và trích xuất nội dung.\n"
-        "🎨 **3. Vẽ tranh nghệ thuật (`generate_image`):** Tạo ảnh Flux 1024x1024 theo mọi mô tả.\n"
-        "🧮 **4. Tính toán chính xác (`calculate`):** Xử lý các phép tính toán học phức tạp.\n"
-        "⏱️ **5. Thời gian thực tế (`get_current_time`):** Kiểm tra ngày giờ hiện tại ở Việt Nam.\n\n"
+        "Mình là **AI Agent tự chủ (OpenClaw Architecture)** được trang bị đầy đủ công cụ & trí nhớ dài hạn:\n\n"
+        "🧠 **1. Trí nhớ vĩnh viễn (Long-Term Memory):** Ghi nhớ sở thích, tên gọi và ngữ cảnh không bao giờ quên.\n"
+        "📝 **2. Sổ tay ghi chú (`manage_notes`):** Lưu trữ, quản lý các ghi chú cá nhân của bạn.\n"
+        "⏰ **3. Đặt lịch nhắc nhở (`set_reminder`):** Hẹn giờ và tự động gửi tin nhắn Telegram nhắc việc đúng giờ.\n"
+        "🔍 **4. Tìm kiếm web thời gian thực (`web_search`):** Tra cứu tỷ giá, giá vàng, thời tiết, tin tức mới nhất.\n"
+        "📖 **5. Đọc & tóm tắt link (`read_webpage`):** Cào và phân tích nội dung chi tiết từ bất kỳ URL nào.\n"
+        "🎨 **6. Vẽ tranh nghệ thuật (`generate_image`):** Tạo ảnh nghệ thuật bằng engine Flux 1024x1024.\n"
+        "🧮 **7. Tính toán chính xác (`calculate`):** Giải toán học, tài chính chính xác tuyệt đối.\n\n"
         "📌 **Các lệnh hữu ích:**\n"
-        "• `/auth <mật_khẩu>` - Kích hoạt quyền truy cập bot\n"
-        "• `/help` - Xem tài liệu & ví dụ chi tiết\n"
-        "• `/image <mô tả>` - Vẽ ảnh trực tiếp bằng Flux\n"
-        "• `/models` - Xem danh sách AI Model & Fallback\n"
-        "• `/status` - Uptime & trạng thái Agent\n"
-        "• `/clear` - Làm mới ngữ cảnh hội thoại\n\n"
-        "Bạn hãy thử nhắn một câu hỏi hoặc yêu cầu bất kỳ cho mình nhé! ✨"
+        "• `/help` - Xem hướng dẫn & kịch bản chi tiết\n"
+        "• `/status` - Xem trạng thái hệ thống & trí nhớ\n"
+        "• `/clear` - Làm mới ngữ cảnh hội thoại\n"
+        "• `/image <mô tả>` - Vẽ ảnh trực tiếp\n\n"
+        "Bạn hãy trò chuyện hoặc giao nhiệm vụ bất kỳ cho mình nhé! ✨"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "📚 **HƯỚNG DẪN SỬ DỤNG AI AGENT AIRI SENSEI**\n\n"
-        "🔐 **Xác thực quyền riêng tư:**\n"
-        "• Gõ `/auth <mật_khẩu>` để kích hoạt quyền truy cập.\n\n"
-        "🤖 **Khả năng tự chủ của Airi Agent:**\n"
-        "Bạn chỉ cần nhắn tin tự nhiên, Airi sẽ tự động suy nghĩ và chọn công cụ phù hợp:\n\n"
-        "• 🔍 *'Tin tức công nghệ mới nhất hôm nay có gì hot?'* → Airi tìm kiếm trên web.\n"
-        "• 📖 *'Đọc giúp mình trang web https://vnexpress.net và tóm tắt.'* → Airi cào và đọc dữ liệu.\n"
-        "• 🧮 *'Tính (450 * 12) + (3500 / 7) giúp mình'* → Airi tính toán số học chuẩn xác.\n"
-        "• ⏱️ *'Hôm nay là thứ mấy và mấy giờ rồi?'* → Airi kiểm tra giờ Việt Nam.\n"
-        "• 🎨 *'Vẽ cho mình một chú mèo phi hành gia trong dải ngân hà'* → Airi tự vẽ và gửi ảnh.\n\n"
-        "🔹 **Lệnh tạo ảnh trực tiếp:**\n"
-        "• `/image <mô tả>` (Ví dụ: `/image phong cảnh Đà Lạt mộng mơ lúc hoàng hôn anime 4k`)\n\n"
-        "🔹 **Quản trị hệ thống:**\n"
-        "• `/clear`: Xóa lịch sử nhớ để bắt đầu chủ đề mới\n"
-        "• `/models`: Xem các model AI và cơ chế dự phòng\n"
-        "• `/status`: Kiểm tra độ trễ mạng và Uptime server 24/7"
+        "📚 **HƯỚNG DẪN SỬ DỤNG AIRI SENSEI (OPENCLAW AGENT)**\n\n"
+        "🤖 **Khả năng tự chủ & các câu lệnh mẫu:**\n\n"
+        "• 🧠 **Ghi nhớ cá nhân:** *'Anh tên là Tiến, nhớ nha em'*, *'Từ giờ gọi anh là anh yêu nha'*\n"
+        "• 📝 **Sổ tay ghi chú:** *'Lưu ghi chú: Mua tài liệu AI'*, *'Xem danh sách ghi chú của anh'*\n"
+        "• ⏰ **Hẹn giờ nhắc nhở:** *'Nhắc anh sau 30 phút đi uống nước'*, *'Sau 60 phút nhắc anh họp nhóm'*\n"
+        "• 🔍 **Tra cứu thời gian thực:** *'Giá vàng hôm nay bao nhiêu?'*, *'Thời tiết Hà Nội hôm nay'*\n"
+        "• 📖 **Đọc link bài viết:** *'Đọc trang https://vnexpress.net và tóm tắt 3 ý chính'*\n"
+        "• 🎨 **Vẽ tranh nghệ thuật:** *'Vẽ cho mình chú mèo phi hành gia ngoài vũ trụ'* hoặc `/image ...`\n"
+        "• 🧮 **Tính toán số học:** *'Tính giúp mình: (1250 * 45) / 1.1 + sqrt(144)'*\n\n"
+        "🔹 **Các lệnh quản trị:**\n"
+        "• `/clear`: Xóa lịch sử nhớ để bắt đầu cuộc trò chuyện mới\n"
+        "• `/models`: Xem danh sách AI Model & Cascading Fallback\n"
+        "• `/status`: Xem trạng thái Uptime 24/7 và hệ thống"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
@@ -172,14 +172,15 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     is_auth = auth_service.is_authorized(user_id)
 
     text = (
-        "⚡ **TRẠNG THÁI HỆ THỐNG AIRI SENSEI**\n\n"
+        "⚡ **TRẠNG THÁI HỆ THỐNG AIRI SENSEI (OPENCLAW AGENT)**\n\n"
         f"🟢 **Trạng thái:** Online 24/7 (Render Web Service)\n"
-        f"🤖 **Chế độ hoạt động:** Autonomous AI Agent (ReAct Loop + Tools)\n"
+        f"🤖 **Kiến trúc:** OpenClaw Autonomous ReAct Agent\n"
+        f"🧠 **Trí nhớ dài hạn:** SQLite Persistent Memory (Vĩnh viễn) ✅\n"
         f"⏱️ **Thời gian hoạt động (Uptime):** {uptime_str}\n"
         f"🔐 **Chế độ bảo vệ:** {'Bật (Private Whitelist)' if settings.AUTH_ENABLED else 'Mở (Public)'}\n"
         f"👤 **Tài khoản của bạn:** {'Đã cấp quyền ✅' if is_auth else 'Chưa cấp quyền ❌'}\n"
-        f"🛠️ **Công cụ tích hợp:** Web Search, Read Webpage, Calculator, VN Time, Image Gen\n"
-        f"🎨 **Image Engine:** `{settings.IMAGE_MODEL}` (Flux)\n"
+        f"🛠️ **Kỹ năng:** Web Search, Read Webpage, Memory Facts, Notes, Reminders, Calculator, Flux Gen\n"
+        f"🎨 **Image Engine:** `{settings.IMAGE_MODEL}` (Flux 1024x1024)\n"
         f"🌐 **HTTP Health Server:** Port `{settings.PORT}` OK"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)

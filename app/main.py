@@ -6,6 +6,8 @@ from app.config import get_settings
 from app.bot.setup import build_bot_app
 from app.server.web import create_web_app
 from app.services.keep_alive import run_keep_alive_loop
+from app.services.memory_service import MemoryService
+from app.services.reminder_worker import run_reminder_loop
 
 
 def setup_logging(level: str = "INFO"):
@@ -38,7 +40,10 @@ async def main():
     await bot_app.updater.start_polling(drop_pending_updates=True)
     logger.info("Telegram Bot polling started successfully!")
 
-    # 4. Optional keep-alive task
+    # 4. Background tasks: Keep-alive & Reminder Worker
+    memory_service = MemoryService()
+    reminder_task = asyncio.create_task(run_reminder_loop(bot_app.bot, memory_service))
+
     keep_alive_task = None
     if settings.KEEP_ALIVE_URL:
         keep_alive_task = asyncio.create_task(run_keep_alive_loop(settings.KEEP_ALIVE_URL))
@@ -57,6 +62,8 @@ async def main():
         await stop_event.wait()
     finally:
         logger.info("Shutting down gracefully...")
+        if reminder_task:
+            reminder_task.cancel()
         if keep_alive_task:
             keep_alive_task.cancel()
         await bot_app.updater.stop()

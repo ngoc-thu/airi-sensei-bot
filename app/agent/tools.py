@@ -259,4 +259,82 @@ AGENT_TOOLS_SCHEMA: List[Dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember_user_fact",
+            "description": (
+                "Ghi nhớ thông tin cá nhân, tên gọi, biệt danh, sở thích hoặc cách xưng hô "
+                "mong muốn của người dùng vào bộ nhớ vĩnh viễn (Persistent Long-Term Memory)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Tên thông tin (ví dụ: 'tên_gọi', 'cách_xưng_hô', 'sở_thích')",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Giá trị cần ghi nhớ (ví dụ: 'anh yêu', 'Tiến', 'thích uống cà phê')",
+                    },
+                },
+                "required": ["key", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_notes",
+            "description": (
+                "Quản lý sổ tay ghi chú cá nhân (Notes) của người dùng: lưu ghi chú mới, "
+                "xem danh sách ghi chú hoặc xóa ghi chú theo mã số."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["save", "list", "delete"],
+                        "description": "Thao tác cần thực hiện ('save', 'list', 'delete')",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Tiêu đề ghi chú (khi lưu)",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Nội dung ghi chú chi tiết",
+                    },
+                    "note_id": {
+                        "type": "integer",
+                        "description": "Mã số ID của ghi chú cần xóa (khi delete)",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_reminder",
+            "description": "Đặt lịch hẹn giờ nhắc nhở người dùng trên Telegram sau một số phút cụ thể.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "minutes_from_now": {
+                        "type": "integer",
+                        "description": "Số phút tính từ hiện tại (ví dụ: 15 để nhắc sau 15 phút, 60 là 1 tiếng)",
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Nội dung cần nhắc nhở",
+                    },
+                },
+                "required": ["minutes_from_now", "message"],
+            },
+        },
+    },
 ]

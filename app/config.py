@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # Security / Authentication
     AUTH_ENABLED: bool = True
     AUTH_PASSCODE: str = "airi2026"
-    ALLOWED_USER_IDS: str = ""
+    ALLOWED_USER_IDS: str = "5556841083"
 
     # OpenRouter Free Tier
     OPENROUTER_API_KEY: str = ""

@@ -19,3 +19,8 @@ htmlcov/
 .idea/
 .vscode/
 *.swp
+
+# SQLite Databases & Local Data
+*.db
+*.sqlite3
+data/

@@ -55,3 +55,28 @@ async def test_agent_tool_call_execution(mock_settings):
         result = await agent.run(user_id=123, user_input="Bây giờ là mấy giờ?")
         assert "Thứ Hai" in result.text
         assert "get_current_time" in result.tools_used
+
+
+@pytest.mark.asyncio
+async def test_agent_openclaw_tools_execution(mock_settings, tmp_path):
+    from app.services.memory_service import MemoryService
+    mem = MemoryService(db_path=str(tmp_path / "agent_mem.db"))
+    agent = AiriAgent(settings=mock_settings, memory_service=mem)
+
+    # 1. remember_user_fact tool
+    mock_tool_1 = MagicMock()
+    mock_tool_1.id = "call_fact"
+    mock_tool_1.function.name = "remember_user_fact"
+    mock_tool_1.function.arguments = '{"key": "tên_gọi", "value": "anh yêu"}'
+
+    resp_1 = MagicMock(choices=[MagicMock(message=MagicMock(content=None, tool_calls=[mock_tool_1]))])
+    resp_2 = MagicMock(choices=[MagicMock(message=MagicMock(content="Dạ em nhớ rồi anh yêu ơi!", tool_calls=None))])
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(side_effect=[resp_1, resp_2])
+
+    with patch.object(agent, "_get_client", return_value=mock_client):
+        res = await agent.run(user_id=5556841083, user_input="Từ giờ gọi anh là anh yêu nha")
+        assert "anh yêu" in res.text
+        assert "remember_user_fact" in res.tools_used
+        assert mem.get_facts(5556841083)["tên_gọi"] == "anh yêu"

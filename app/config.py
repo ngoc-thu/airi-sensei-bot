@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     AI_PRIMARY_MODEL: str = "deepseek-v4.1-flash"
     AI_FALLBACK_MODELS: str = "qwen3.8-flash,glm-5.3-flash,minimax-m3.1-flash"
 
+    # Security / Authentication
+    AUTH_ENABLED: bool = True
+    AUTH_PASSCODE: str = "airi2026"
+    ALLOWED_USER_IDS: str = ""
+
     # OpenRouter Free Tier
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
@@ -33,6 +38,17 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     LOG_LEVEL: str = "INFO"
     KEEP_ALIVE_URL: Optional[str] = None
+
+    @property
+    def allowed_user_ids_list(self) -> List[int]:
+        if not self.ALLOWED_USER_IDS:
+            return []
+        ids = []
+        for x in self.ALLOWED_USER_IDS.split(","):
+            cleaned = x.strip()
+            if cleaned.isdigit():
+                ids.append(int(cleaned))
+        return ids
 
     @property
     def fallback_models_list(self) -> List[str]:

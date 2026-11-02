@@ -9,12 +9,14 @@ from telegram.ext import ContextTypes
 from app.config import get_settings
 from app.ai.chat_service import ChatService
 from app.ai.image_service import ImageService, clean_prompt
+from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 chat_service = ChatService(settings=settings)
 image_service = ImageService(settings=settings)
+auth_service = AuthService(settings=settings)
 BOT_START_TIME = time.time()
 
 
@@ -26,7 +28,7 @@ def detect_image_prompt(text: str) -> Optional[str]:
     text_clean = text.strip()
     patterns = [
         r"^(?:hãy\s+)?(?:tạo|vẽ|sinh|generate|draw)\s+(?:cho\s+(?:mình|em|anh|tôi)\s+)?(?:bức\s+)?(?:ảnh|tranh|hình|image|picture)?\s*(?:về|với)?\s*(.+)$",
-        r"^(?:tạo\s+ảnh|vẽ\s+ảnh|vẽ\s+tranh|vẽ\s+hình)\s*[:\s]\s*(.+)$",
+        r"^(?:tạo\s+ảnh|vẽ\s+ảnh|vẽ\s+tranh|vẽ\s+hình)\s*[:\s]*\s*(.+)$",
         r"^(?:vẽ|draw)\s+(.+)$",
     ]
     for pattern in patterns:
@@ -38,14 +40,71 @@ def detect_image_prompt(text: str) -> Optional[str]:
     return None
 
 
+async def check_authorization(update: Update) -> bool:
+    """
+    Kiểm tra người dùng đã được cấp quyền chat hay chưa.
+    Nếu chưa, gửi thông báo kèm User ID để tiện cấp quyền.
+    """
+    if not update.effective_user:
+        return False
+
+    user_id = update.effective_user.id
+    if auth_service.is_authorized(user_id):
+        return True
+
+    text = (
+        "🔒 **Truy cập bị từ chối!**\n\n"
+        "Bot Airi Sensei đang hoạt động ở chế độ riêng tư (Private). "
+        "Chỉ quản trị viên đã xác thực mới có quyền trò chuyện và tạo ảnh.\n\n"
+        f"🆔 **Telegram ID của bạn:** `{user_id}`\n\n"
+        "👉 Nếu bạn có mật mã quản trị, hãy nhập:\n"
+        "`/auth <mật_khẩu>`"
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    return False
+
+
+async def auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Xác thực quyền quản trị bằng mật khẩu bí mật
+    """
+    user_id = update.effective_user.id
+    if not context.args:
+        await update.message.reply_text(
+            f"🔑 **Xác thực quyền sử dụng:**\n\n"
+            f"ID của bạn: `{user_id}`\n\n"
+            "Vui lòng nhập lệnh kèm mật mã:\n`/auth <mật_khẩu>`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    passcode = " ".join(context.args).strip()
+    if auth_service.authenticate(user_id, passcode):
+        await update.message.reply_text(
+            f"✅ **Xác thực thành công!** 🌸\n\n"
+            f"Chào mừng anh! Quyền truy cập bot Airi Sensei đã được kích hoạt cho tài khoản của anh (ID: `{user_id}`).\n\n"
+            "Bây giờ anh có thể thoải mái hỏi đáp và vẽ tranh rồi nhé! ✨",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    else:
+        await update.message.reply_text("❌ Mật khẩu xác thực không đúng. Vui lòng kiểm tra lại!")
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_name = update.effective_user.first_name if update.effective_user else "bạn"
+    user_id = update.effective_user.id
+
+    is_auth = auth_service.is_authorized(user_id)
+    status_tag = "🟢 *(Đã xác thực)*" if is_auth else "🔒 *(Chưa xác thực - Dùng /auth <pass>)*"
+
     text = (
-        f"🌸 **Chào {user_name}! Mình là Airi Sensei (@AiriSenseiBot)** 🌸\n\n"
+        f"🌸 **Chào {user_name}! Mình là Airi Sensei (@AiriSenseiBot)** 🌸\n"
+        f"Trạng thái tài khoản: {status_tag}\n\n"
         "Rất vui được đồng hành cùng bạn! Mình có 2 tính năng chính:\n\n"
         "💬 **1. Hỏi đáp thông minh:** Bạn chỉ cần nhắn bất kỳ câu hỏi nào, mình sẽ giải đáp chu đáo.\n"
         "🎨 **2. Tạo ảnh nghệ thuật:** Dùng lệnh `/image <mô tả>` hoặc nhắn tự nhiên *'vẽ một chú mèo...'* để mình vẽ tranh cho bạn.\n\n"
         "📌 **Các lệnh hữu ích:**\n"
+        "• `/auth <mật_khẩu>` - Xác thực quyền truy cập riêng tư\n"
         "• `/help` - Xem hướng dẫn chi tiết\n"
         "• `/image <mô tả>` - Vẽ ảnh bằng AI\n"
         "• `/models` - Xem danh sách model AI & cơ chế Fallback\n"
@@ -59,13 +118,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
         "📚 **HƯỚNG DẪN SỬ DỤNG AIRI SENSEI**\n\n"
+        "🔐 **Xác thực quyền riêng tư:**\n"
+        "• Gõ `/auth <mật_khẩu>` để kích hoạt quyền chat.\n\n"
         "🔹 **Trò chuyện & Hỏi đáp:**\n"
         "Chỉ cần gõ tin nhắn trực tiếp gửi cho bot. Ví dụ:\n"
         "• *'Giải thích sự khác nhau giữa Webhook và Polling?'*\n"
-        "• *'Viết giúp mình hàm Python đảo ngược chuỗi.'*\n"
-        "• *'Làm thế nào để ngủ ngon hơn mỗi tối?'*\n\n"
+        "• *'Viết giúp mình hàm Python đảo ngược chuỗi.'*\n\n"
         "🔹 **Vẽ tranh AI:**\n"
-        "Cách 1: Gõ lệnh `/image <mô tả>` (ví dụ: `/image phi hành gia anime`)\n"
+        "Cách 1: Gõ lệnh `/image <mô tả>` (ví dụ: `/image chú mèo lông xù`)\n"
         "Cách 2: Nhắn tự nhiên: *'vẽ con mèo'* hoặc *'tạo ảnh hoàng hôn trên biển 4k'*\n\n"
         "🔹 **Các lệnh quản trị:**\n"
         "• `/clear`: Xóa lịch sử nhớ để bắt đầu cuộc trò chuyện mới\n"
@@ -76,15 +136,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def models_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await check_authorization(update):
+        return
+
     fallback_list = ", ".join(settings.fallback_models_list)
+    or_free_list = ", ".join(settings.openrouter_free_models_list)
     text = (
         "🤖 **CẤU HÌNH AI MODELS & CƠ CHẾ CASCADING FALLBACK**\n\n"
-        f"🥇 **Model chính (Primary):** `{settings.AI_PRIMARY_MODEL}`\n"
-        f"🥈 **Các model dự phòng (Fallbacks):** `{fallback_list}`\n"
-        f"🌸 **Free Fallback:** `Airi-Flash` (Pollinations AI Free Engine)\n"
-        f"🎨 **Engine sinh ảnh:** `{settings.IMAGE_MODEL}` (dự phòng: `{settings.IMAGE_FALLBACK_MODEL}`)\n"
-        f"🌐 **AI Gateway:** `{settings.AI_BASE_URL}`\n\n"
-        "💡 *Cơ chế hoạt động:* Bot tự động luân chuyển model trong 0.2s khi gặp lỗi quota hoặc quá tải!"
+        f"🥇 **OpenRouter Free Models:** `{or_free_list}`\n"
+        f"🥈 **B.AI Models:** `{settings.AI_PRIMARY_MODEL}`, `{fallback_list}`\n"
+        f"🌸 **Free Fallback:** `Airi-Flash` (GPT Reasoning Engine)\n"
+        f"🎨 **Engine sinh ảnh:** `{settings.IMAGE_MODEL}` (Flux 1024x1024)\n\n"
+        "💡 *Cơ chế:* Tự động luân chuyển model khi gặp lỗi quota hoặc nghẽn mạng!"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
@@ -95,24 +158,34 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     minutes, seconds = divmod(remainder, 60)
     uptime_str = f"{hours}h {minutes}m {seconds}s"
 
+    user_id = update.effective_user.id if update.effective_user else 0
+    is_auth = auth_service.is_authorized(user_id)
+
     text = (
         "⚡ **TRẠNG THÁI HỆ THỐNG AIRI SENSEI**\n\n"
         f"🟢 **Trạng thái:** Online 24/7 (Render Web Service)\n"
         f"⏱️ **Thời gian hoạt động (Uptime):** {uptime_str}\n"
-        f"🧠 **AI Engine:** `{settings.AI_PRIMARY_MODEL}` + Cascading Fallback\n"
-        f"🎨 **Image Engine:** `{settings.IMAGE_MODEL}` (Flux 1024x1024)\n"
+        f"🔐 **Chế độ bảo vệ:** {'Bật (Private Whitelist)' if settings.AUTH_ENABLED else 'Mở (Public)'}\n"
+        f"👤 **Tài khoản của bạn:** {'Đã cấp quyền ✅' if is_auth else 'Chưa cấp quyền ❌'}\n"
+        f"🎨 **Image Engine:** `{settings.IMAGE_MODEL}` (Flux)\n"
         f"🌐 **HTTP Health Server:** Port `{settings.PORT}` OK"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await check_authorization(update):
+        return
+
     user_id = update.effective_user.id
     chat_service.clear_history(user_id)
     await update.message.reply_text("🧹 Mình đã làm mới bộ nhớ trò chuyện rồi! Chúng ta bắt đầu chủ đề mới nhé! ✨")
 
 
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await check_authorization(update):
+        return
+
     if not context.args:
         await update.message.reply_text(
             "🎨 Bạn hãy nhập mô tả tranh muốn vẽ nhé!\n\n"
@@ -149,7 +222,11 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     if not user_message:
         return
 
-    # 1. Kiểm tra nếu người dùng nói ý định vẽ ảnh (ví dụ: 'tạo ảnh con mèo', 'vẽ con mèo')
+    # Kiểm tra phân quyền xác thực trước khi xử lý
+    if not await check_authorization(update):
+        return
+
+    # 1. Kiểm tra nếu người dùng nói ý định vẽ ảnh
     detected_prompt = detect_image_prompt(user_message)
     if detected_prompt:
         logger.info("Detected image generation intent: '%s'", detected_prompt)

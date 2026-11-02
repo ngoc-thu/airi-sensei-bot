@@ -10,6 +10,12 @@ services:
     envVars:
       - key: BOT_TOKEN
         sync: false
+      - key: AUTH_ENABLED
+        value: "true"
+      - key: AUTH_PASSCODE
+        value: "airi2026"
+      - key: ALLOWED_USER_IDS
+        sync: false
       - key: AI_BASE_URL
         value: https://api.b.ai/v1
       - key: AI_API_KEY

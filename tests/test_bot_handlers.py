@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from telegram import Update, Message, User, Chat
 from telegram.constants import ChatType
 from app.config import Settings
-from app.bot.handlers import start_command, clear_command, image_command, detect_image_prompt, text_message_handler
+from app.bot.handlers import start_command, clear_command, image_command, detect_image_prompt, auth_command
 
 
 @pytest.fixture
@@ -42,20 +42,39 @@ async def test_start_command(mock_update, mock_context):
 
 
 @pytest.mark.asyncio
-async def test_clear_command(mock_update, mock_context):
-    with patch("app.bot.handlers.chat_service") as mock_chat:
-        await clear_command(mock_update, mock_context)
-        mock_chat.clear_history.assert_called_once_with(123)
+async def test_auth_command_success(mock_update, mock_context):
+    mock_context.args = ["airi2026"]
+    with patch("app.bot.handlers.auth_service.authenticate", return_value=True):
+        await auth_command(mock_update, mock_context)
         mock_update.message.reply_text.assert_called_once()
-        assert "làm mới" in mock_update.message.reply_text.call_args[0][0]
+        assert "thành công" in mock_update.message.reply_text.call_args[0][0]
 
 
 @pytest.mark.asyncio
-async def test_image_command_no_prompt(mock_update, mock_context):
-    mock_context.args = []
-    await image_command(mock_update, mock_context)
-    mock_update.message.reply_text.assert_called_once()
-    assert "/image" in mock_update.message.reply_text.call_args[0][0]
+async def test_auth_command_fail(mock_update, mock_context):
+    mock_context.args = ["wrong_pass"]
+    with patch("app.bot.handlers.auth_service.authenticate", return_value=False):
+        await auth_command(mock_update, mock_context)
+        mock_update.message.reply_text.assert_called_once()
+        assert "không đúng" in mock_update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_clear_command_authorized(mock_update, mock_context):
+    with patch("app.bot.handlers.auth_service.is_authorized", return_value=True):
+        with patch("app.bot.handlers.chat_service") as mock_chat:
+            await clear_command(mock_update, mock_context)
+            mock_chat.clear_history.assert_called_once_with(123)
+            mock_update.message.reply_text.assert_called_once()
+            assert "làm mới" in mock_update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_clear_command_unauthorized(mock_update, mock_context):
+    with patch("app.bot.handlers.auth_service.is_authorized", return_value=False):
+        await clear_command(mock_update, mock_context)
+        mock_update.message.reply_text.assert_called_once()
+        assert "Truy cập bị từ chối" in mock_update.message.reply_text.call_args[0][0]
 
 
 def test_detect_image_prompt():

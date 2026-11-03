@@ -1,74 +1,94 @@
-# 🌸 Airi Sensei Telegram Bot (@AiriSenseiBot)
+# 🌸 Airi Sensei Telegram Bot v3.0 (@AiriSenseiBot)
 
-> **Bot Telegram AI thông minh:** Hỏi đáp kiến thức đa lĩnh vực (B.AI / Gemini / OpenAI) và Tạo ảnh nghệ thuật (/image) với cơ chế Cascading Multi-Model Fallback, chạy 24/7 ổn định trên Render Web Service (Starter Plan $7/mo).
-
----
-
-## 🌟 Tính Năng Nổi Bật
-
-1. 💬 **Hỏi đáp thông minh (AI Q&A):**
-   - Trò chuyện tự nhiên bằng tiếng Việt theo phong cách cô giáo "Airi Sensei".
-   - Bộ nhớ hội thoại ngữ cảnh (Context Memory).
-   - **Cascading Fallback:** Luân chuyển tự động qua các model hàng đầu:
-     `DeepSeek-v4.1-Flash` ➔ `Qwen3.8-Flash` ➔ `GLM-5.3-Flash` ➔ `Minimax-m3.1-Flash` ➔ `Fallback Persona`.
-2. 🎨 **Tạo ảnh nghệ thuật (/image):**
-   - Lệnh: `/image <mô tả>` hoặc `/taoanh <mô tả>`.
-   - Sinh ảnh 1024x1024 chất lượng cao bằng engine Flux (Pollinations) hoàn toàn miễn phí.
-   - Tự động fallback sang engine Turbo nếu Flux bận.
-3. ⚡ **Chạy 24/7 Always-On trên Render:**
-   - Sử dụng gói **Starter ($7/tháng)** tận dụng $50 credit của Render (chạy hơn 7 tháng liên tục không lo ngủ đông).
-   - Tích hợp HTTP Server nội bộ mở cổng `PORT` và endpoint `/health` phục vụ health check và monitoring.
-4. 🔐 **Chuẩn 12-Factor App:**
-   - 100% cấu hình qua Biến môi trường (Environment Variables). Không lưu secret trong mã nguồn.
+> **Next-Generation Autonomous AI Agent:** Built on **OpenClaw Agent Runtime** + **Airi Personalized Persona Layer**. Featuring multi-tier LLM fallback (Groq 120B / Gemini Flash / OpenRouter), deep real-time research, Flux 1024x1024 AI art, persistent long-term memory, personal notes, and native automations — deployed 24/7 on Render (Docker Web Service, Starter Plan $7/mo).
 
 ---
 
-## 📋 Danh Sách Lệnh Trên Telegram
+## 🌟 Architecture Highlights (v3.0)
 
-| Lệnh | Mô tả |
+1. 🤖 **OpenClaw Primary Agent Runtime:**
+   - Single-owner Telegram channel driver powered by grammY long-polling.
+   - Autonomous ReAct thought-action-observation loop with tool sandboxing.
+   - Native automations and cron scheduling for exact time reminders.
+   - Strict workspace filesystem isolation (`/data/workspace`).
+
+2. 🌸 **Airi Sensei Personality Layer:**
+   - Deep conversational empathy, warm Vietnamese fluency, and lively expressions.
+   - **Dynamic Honorific Adaptation:** Readily accepts user-requested address (*anh yêu*, *chồng*, *sếp*).
+   - Strict research protocol: DuckDuckGo search + deep webpage extraction (`read_webpage`) for verified commodity prices, gold rates, and currency tables with source citations.
+
+3. ⚡ **Multi-Tier Cascading Fallback:**
+   - **Tier 1:** Groq Cloud Flagship (`openai/gpt-oss-120b`, ultra-fast 500 T/s).
+   - **Tier 2:** Google Gemini (`gemini-2.5-flash`, 1M context capacity).
+   - **Tier 3:** OpenRouter Free Tier (`google/gemma-4-31b-it:free`, `nvidia/nemotron-3.5-lightning:free`).
+   - **Tier 4:** Zero-Failure Emergency Fallback (`openai-fast`).
+
+4. 🎨 **AI Art Studio (`skills/airi-image/`):**
+   - Commands: `/image <prompt>` or `/taoanh <prompt>`, plus automatic natural conversation detection.
+   - Automatic prompt cleaning, Vietnamese-to-English enhancement, and Flux 1024x1024 generation (with Turbo fallback).
+
+5. 💾 **100% Data Preservation & Migration:**
+   - Dedicated scripts for atomic backup (`scripts/backup_legacy_db.py`) and idempotent migration (`scripts/migrate_legacy_data.py`).
+   - User facts migrated to `MEMORY.md`, notes to Markdown files, active reminders to OpenClaw automations.
+
+---
+
+## 📋 Commands on Telegram
+
+| Command | Description |
 |---|---|
-| `/start` | Lời chào từ Airi Sensei và danh mục tiện ích |
-| `/help` | Xem hướng dẫn sử dụng chi tiết |
-| `/image <mô tả>` | Sinh ảnh bằng AI từ văn bản (Ví dụ: `/image phi hành gia anime`) |
-| `/taoanh <mô tả>` | Cú pháp tiếng Việt tương đương `/image` |
-| `/models` | Xem model chính, danh sách fallback và gateway AI |
-| `/status` | Xem Uptime, tài nguyên và trạng thái kết nối |
-| `/clear` | Xóa bộ nhớ ngữ cảnh để bắt đầu chủ đề mới |
-| *Nhắn tin bất kỳ* | Hỏi đáp kiến thức với AI |
+| `/start` | Welcome greeting, capability overview, and authorization status |
+| `/help` | Detailed usage guide and example prompts |
+| `/image <prompt>` | Generate 1024x1024 artwork using Flux |
+| `/taoanh <prompt>` | Vietnamese alias for `/image` |
+| `/models` | View active LLM tiers and fallback configuration |
+| `/status` | View system health, uptime, and active skills |
+| `/clear` | Refresh conversation context to start a new topic |
+| *Natural message* | Chat, ask for research, calculate math, save notes, or schedule reminders |
 
 ---
 
-## ⚙️ Cấu Hình Biến Môi Trường (.env)
+## 🛠️ Modular Skills Directory
 
-| Tên biến | Mặc định | Chức năng |
-|---|---|---|
-| `BOT_TOKEN` | *(Bắt buộc)* | Mã token lấy từ @BotFather |
-| `AI_BASE_URL` | `https://api.b.ai/v1` | Cổng API OpenAI-compatible (B.AI, OpenAI, Groq,...) |
-| `AI_API_KEY` | `""` | API Key của B.AI hoặc nhà cung cấp AI |
-| `AI_PRIMARY_MODEL` | `deepseek-v4.1-flash` | Model chính ưu tiên trả lời câu hỏi |
-| `AI_FALLBACK_MODELS` | `qwen3.8-flash,glm-5.3-flash,minimax-m3.1-flash` | Danh sách model dự phòng |
-| `IMAGE_MODEL` | `flux` | Engine sinh ảnh chính |
-| `IMAGE_FALLBACK_MODEL` | `turbo` | Engine sinh ảnh dự phòng |
-| `PORT` | `8080` | Cổng HTTP Server trên Render |
-| `HOST` | `0.0.0.0` | IP lắng nghe HTTP |
-| `LOG_LEVEL` | `INFO` | Mức log (DEBUG / INFO / WARNING) |
+```
+skills/
+├── airi-image/            # Pollinations Flux/Turbo 1024x1024 generation
+├── airi-notes/            # Markdown personal notes management
+├── airi-user-memory/      # Persistent facts & profile in MEMORY.md
+├── airi-reminders/        # Automated scheduled reminders
+├── research/              # DuckDuckGo search + deep webpage extraction
+└── document-generation/   # Sandboxed AST calculation & markdown tables
+```
 
 ---
 
-## 🚀 Triển Khai Thủ Công Lên Render (Nếu Cần)
+## 🚀 Deployment to Render (Docker Web Service)
 
-1. **Đẩy code lên GitHub:**
-   ```bash
-   git add .
-   git commit -m "feat: initial commit"
-   git push origin main
-   ```
-2. **Tạo Web Service trên Render:**
-   - Truy cập [dashboard.render.com](https://dashboard.render.com).
-   - Chọn **New +** ➔ **Web Service** ➔ Kết nối repository GitHub này.
-   - Chọn môi trường: **Python** hoặc **Docker**.
-   - Build Command: `pip install -r requirements.txt` (nếu dùng Python Native).
-   - Start Command: `python -m app.main`.
-   - Instance Type: Chọn **Starter ($7/month)** để dùng $50 credit.
-   - Thêm Environment Variables: `BOT_TOKEN`, `AI_API_KEY`, `AI_BASE_URL`.
-   - Bấm **Create Web Service**!
+1. **Prerequisites:**
+   - Render Account with **Starter Plan** ($7/mo) to support persistent disks.
+   - Telegram Bot Token from `@BotFather`.
+   - API keys for Groq, Gemini, and OpenRouter (optional).
+
+2. **Deploy via `render.yaml`:**
+   - Connect your GitHub repository to Render.
+   - Render automatically provisions the Docker container, attaches the 1 GB persistent disk at `/data`, and configures the `/health` endpoint.
+
+3. **Required Environment Variables:**
+   - `OPENCLAW_GATEWAY_TOKEN`: Secure random token securing the gateway.
+   - `TELEGRAM_BOT_TOKEN`: Telegram bot token.
+   - `ALLOWED_USER_IDS`: Comma-separated list of authorized Telegram user IDs.
+   - `GROQ_API_KEY`: API key for Groq Cloud.
+   - `GEMINI_API_KEY`: API key for Google Gemini.
+   - `OPENROUTER_API_KEY`: API key for OpenRouter.
+
+---
+
+## 📚 Technical Documentation
+
+- [v3.0 Architecture Specification](docs/architecture-v3.md)
+- [Legacy Feature Mapping (v2.5 to v3.0)](docs/legacy-feature-mapping.md)
+- [Migration Plan & Runbook](docs/migration-plan.md)
+- [Model Provider & Fallback Details](docs/model-providers.md)
+- [Data Migration Manual](docs/data-migration.md)
+- [Security Review & Tool Sandboxing](docs/security-review.md)
+- [Render Deployment Guide](docs/deployment-render.md)

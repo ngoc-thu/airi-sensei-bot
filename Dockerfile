@@ -1,27 +1,40 @@
-FROM python:3.12-slim
+# ==============================================================================
+# Airi Sensei v3.0 Production Dockerfile
+# Based on pinned OpenClaw Agent Runtime (Slim variant, no heavy Chromium)
+# ==============================================================================
+FROM ghcr.io/openclaw/openclaw:2026.10.10-beta.5-slim
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8080 \
-    HOST=0.0.0.0
+USER root
+
+# Install minimal Python runtime for migration utilities and curl for health check
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Cài đặt dependencies hệ thống tối thiểu nếu cần
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Copy OpenClaw configuration and Airi workspace assets
+COPY openclaw.json ./openclaw.json
+COPY workspace/ ./workspace/
+COPY skills/ ./skills/
+COPY scripts/ ./scripts/
+COPY entrypoint.sh ./entrypoint.sh
 
-# Cache requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN chmod +x ./entrypoint.sh ./scripts/*.py
 
-# Copy source code
-COPY app/ ./app/
+# Runtime environment configuration
+ENV OPENCLAW_HOME=/data/.openclaw \
+    OPENCLAW_CONFIG_PATH=/data/.openclaw/openclaw.json \
+    OPENCLAW_WORKSPACE=/data/workspace \
+    PORT=8080 \
+    HOST=0.0.0.0
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
-CMD ["python", "-m", "app.main"]
+ENTRYPOINT ["/app/entrypoint.sh"]

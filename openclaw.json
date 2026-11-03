@@ -1,0 +1,92 @@
+{
+  // Airi Sensei v3.0 - OpenClaw Agent Runtime Configuration
+  "gateway": {
+    "port": 8080,
+    "bind": "0.0.0.0",
+    "auth": {
+      "mode": "token",
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+
+  // Telegram Channel Driver (Powered by grammY long-polling)
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "whitelist",
+      "allowedUsers": [
+        "5556841083"
+      ],
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      },
+      "capabilities": {
+        "images": true,
+        "voice": false
+      }
+    }
+  },
+
+  // Primary Agent Runtime & Persona Settings
+  "agents": {
+    "defaults": {
+      "workspace": "${OPENCLAW_WORKSPACE:-/data/workspace}",
+      "model": {
+        "primary": "groq/openai/gpt-oss-120b",
+        "fallbacks": [
+          "google/gemini-2.5-flash",
+          "openrouter/google/gemma-4-31b-it:free",
+          "groq/openai/gpt-oss-20b"
+        ]
+      },
+      "sandbox": {
+        "mode": "rw",
+        "root": "${OPENCLAW_WORKSPACE:-/data/workspace}"
+      }
+    }
+  },
+
+  // Model Providers Configuration & Authentication Mapping
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "groq": {
+        "apiKey": "${GROQ_API_KEY}",
+        "baseUrl": "https://api.groq.com/openai/v1"
+      },
+      "google": {
+        "apiKey": "${GEMINI_API_KEY}",
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/"
+      },
+      "openrouter": {
+        "apiKey": "${OPENROUTER_API_KEY}",
+        "baseUrl": "https://openrouter.ai/api/v1"
+      }
+    }
+  },
+
+  // Lightweight Tool Access Control (Security Boundaries)
+  "tools": {
+    "allow": [
+      "web_search",
+      "read_webpage",
+      "calculate",
+      "generate_image",
+      "remember_user_fact",
+      "manage_notes",
+      "set_reminder",
+      "file_read",
+      "file_write"
+    ],
+    "deny": [
+      "shell",
+      "bash",
+      "exec",
+      "browser",
+      "terminal"
+    ]
+  }
+}

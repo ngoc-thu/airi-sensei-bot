@@ -1,14 +1,27 @@
+# Git & version control
 .git
 .github
+.gitignore
+
+# Python virtual environment & cache
 .venv
 venv
-.env
-.pytest_cache
-tests
 __pycache__
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache
+
+# Environment secrets & local SQLite databases
+.env
+data/airi_memory.db
+data/test.db
+data/legacy_backup/
+
+# Tests & IDE configs
+tests/
 .idea
 .vscode
-*.md
+
+# Build artifacts & docs
+docs/

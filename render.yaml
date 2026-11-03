@@ -1,39 +1,53 @@
 services:
   - type: web
     name: airi-sensei-bot
-    runtime: python
+    runtime: docker
     plan: starter
     region: oregon
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m app.main
+    dockerfilePath: Dockerfile
     healthCheckPath: /health
+    disk:
+      name: airi-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
-      - key: BOT_TOKEN
+      # OpenClaw Core Configuration
+      - key: OPENCLAW_CONFIG_PATH
+        value: /data/.openclaw/openclaw.json
+      - key: OPENCLAW_WORKSPACE
+        value: /data/workspace
+      - key: OPENCLAW_HOME
+        value: /data/.openclaw
+      - key: OPENCLAW_GATEWAY_TOKEN
         sync: false
-      - key: AUTH_ENABLED
-        value: "true"
-      - key: AUTH_PASSCODE
-        value: "airi2026"
+
+      # Telegram Channel Driver
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
       - key: ALLOWED_USER_IDS
+        value: "5556841083"
+
+      # Multi-Tier LLM Providers
+      - key: GROQ_API_KEY
         sync: false
-      - key: AI_BASE_URL
-        value: https://api.b.ai/v1
-      - key: AI_API_KEY
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: GEMINI_API_KEY
         sync: false
-      - key: AI_PRIMARY_MODEL
-        value: deepseek-v4.1-flash
-      - key: AI_FALLBACK_MODELS
-        value: qwen3.8-flash,glm-5.3-flash,minimax-m3.1-flash
+      - key: GEMINI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_BASE_URL
         value: https://openrouter.ai/api/v1
-      - key: OPENROUTER_FREE_MODELS
-        value: google/gemma-4-31b-it:free,nvidia/nemotron-3.5-lightning:free,google/gemma-4-26b-a4b-it:free
+
+      # Image Generation Engine
       - key: IMAGE_MODEL
         value: flux
       - key: IMAGE_FALLBACK_MODEL
         value: turbo
+
+      # Server Configuration
       - key: PORT
         value: 8080
       - key: HOST

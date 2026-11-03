@@ -59,27 +59,81 @@ def safe_calculate(expression: str) -> str:
 
 def clean_html_to_text(raw_html: str) -> str:
     """
-    Lọc bỏ tag HTML, script, style và trả về văn bản sạch
+    Lọc bỏ tag HTML, script, style và trích xuất cấu trúc văn bản/bảng sạch sẽ
     """
-    # Xóa script và style
-    cleaned = re.sub(r"<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", raw_html, flags=re.DOTALL | re.IGNORECASE)
-    # Xóa toàn bộ tags
+    # Xóa script, style, head, svg, nav, footer
+    cleaned = re.sub(
+        r"<(script|style|head|svg|nav|footer)[^>]*>.*?</\1>",
+        " ",
+        raw_html,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    # Giữ cấu trúc hàng và khối nội dung
+    cleaned = re.sub(r"</(tr|p|div|h1|h2|h3|h4|li)>", "\n", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"</td>\s*<td[^>]*>", " | ", cleaned, flags=re.IGNORECASE)
+    # Loại bỏ thuộc tính có ngoặc kép để tránh ký tự > trong CSS class (Tailwind/Next.js)
+    cleaned = re.sub(r'=\s*"[^"]*"', "", cleaned)
+    cleaned = re.sub(r"=\s*'[^']*'", "", cleaned)
+    # Xóa toàn bộ HTML tags còn lại
     cleaned = re.sub(r"<[^>]+>", " ", cleaned)
-    # Decode entities
     text = html.unescape(cleaned)
-    # Chuẩn hóa khoảng trắng
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    # Chuẩn hóa khoảng trắng và dòng
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
+    lines = [line for line in lines if line]
+    return "\n".join(lines)
 
 
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "Mozilla/5.0 (X11; Linux x86_64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
 
-async def _search_bing(query: str, max_results: int = 4) -> List[str]:
+def _search_ddg_sync(query: str, max_results: int = 4) -> List[Dict[str, str]]:
+    """
+    Tìm kiếm qua DuckDuckGo HTML Engine, trích xuất chính xác URL đích và đoạn trích.
+    """
+    url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+    headers = {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    results: List[Dict[str, str]] = []
+    try:
+        with urllib.request.urlopen(req, timeout=7) as resp:
+            content = resp.read().decode("utf-8", errors="ignore")
+
+        pattern = (
+            r"<a[^>]*class=\"result__a\"[^>]*href=\"([^\"]+)\">(.*?)</a>"
+            r".*?<a[^>]*class=\"result__snippet\"[^>]*>(.*?)</a>"
+        )
+        for match in re.finditer(pattern, content, re.DOTALL):
+            raw_url, title_raw, snippet_raw = match.groups()
+            if "uddg=" in raw_url:
+                actual_url = urllib.parse.unquote(raw_url.split("uddg=")[1].split("&")[0])
+            else:
+                actual_url = raw_url
+
+            title = html.unescape(re.sub(r"<[^>]+>", "", title_raw)).strip()
+            snippet = html.unescape(re.sub(r"<[^>]+>", "", snippet_raw)).strip()
+            if title and actual_url and not actual_url.startswith("/"):
+                results.append({"title": title, "url": actual_url, "snippet": snippet})
+            if len(results) >= max_results:
+                break
+    except Exception as e:
+        logger.debug("DuckDuckGo sync search failed: %s", e)
+    return results
+
+
+async def _search_ddg(query: str, max_results: int = 4) -> List[Dict[str, str]]:
+    import asyncio
+    return await asyncio.to_thread(_search_ddg_sync, query, max_results)
+
+
+async def _search_bing(query: str, max_results: int = 4) -> List[Dict[str, str]]:
     url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}"
     headers = {
         "User-Agent": DEFAULT_USER_AGENT,
@@ -87,63 +141,46 @@ async def _search_bing(query: str, max_results: int = 4) -> List[str]:
         "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
     }
     timeout = aiohttp.ClientTimeout(total=8)
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-        async with session.get(url) as resp:
-            if resp.status != 200:
-                return []
-            text = await resp.text()
+    results: List[Dict[str, str]] = []
+    try:
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return []
+                text = await resp.text()
 
-    items = re.findall(r'<li class="b_algo"[^>]*>(.*?)</li>', text, re.DOTALL)
-    results = []
-    for item in items:
-        title_m = re.search(r'<h2><a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', item, re.DOTALL)
-        p_m = re.search(r'<p[^>]*>(.*?)</p>', item, re.DOTALL)
-        if title_m:
-            title = html.unescape(re.sub(r'<[^>]+>', '', title_m.group(2)).strip())
-            snippet = html.unescape(re.sub(r'<[^>]+>', '', p_m.group(1)).strip()) if p_m else ""
-            if title:
-                results.append(f"{len(results) + 1}. **{title}**: {snippet}")
-        if len(results) >= max_results:
-            break
-    return results
-
-
-async def _search_google(query: str, max_results: int = 4) -> List[str]:
-    url = f"https://www.google.com/search?q={urllib.parse.quote(query)}&hl=vi"
-    headers = {
-        "User-Agent": DEFAULT_USER_AGENT,
-        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-    }
-    timeout = aiohttp.ClientTimeout(total=8)
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-        async with session.get(url) as resp:
-            if resp.status != 200:
-                return []
-            text = await resp.text()
-
-    items = re.findall(r'<div class="[^"]*BNeawe[^"]*"[^>]*>(.*?)</div>', text, re.DOTALL)
-    results = []
-    for item in items:
-        clean = html.unescape(re.sub(r'<[^>]+>', '', item).strip())
-        if len(clean) > 20 and clean not in results:
-            results.append(f"{len(results) + 1}. {clean}")
-        if len(results) >= max_results:
-            break
+        items = re.findall(r'<li class="b_algo"[^>]*>(.*?)</li>', text, re.DOTALL)
+        for item in items:
+            title_m = re.search(r'<h2><a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', item, re.DOTALL)
+            p_m = re.search(r'<p[^>]*>(.*?)</p>', item, re.DOTALL)
+            if title_m:
+                raw_url = title_m.group(1)
+                title = html.unescape(re.sub(r'<[^>]+>', '', title_m.group(2)).strip())
+                snippet = html.unescape(re.sub(r'<[^>]+>', '', p_m.group(1)).strip()) if p_m else ""
+                if title and raw_url and not raw_url.startswith("/"):
+                    results.append({"title": title, "url": raw_url, "snippet": snippet})
+            if len(results) >= max_results:
+                break
+    except Exception as e:
+        logger.debug("Bing search failed: %s", e)
     return results
 
 
 async def web_search(query: str, max_results: int = 4) -> str:
     """
-    Tìm kiếm thông tin thời gian thực trên web bằng Bing và Google
+    Tìm kiếm thông tin thời gian thực trên web bằng DuckDuckGo và Bing,
+    trả về danh sách tiêu đề, đường dẫn URL chi tiết và đoạn trích.
     """
     try:
-        results = await _search_bing(query, max_results=max_results)
-        if results:
-            return "\n\n".join(results)
+        items = await _search_ddg(query, max_results=max_results)
+        if not items:
+            items = await _search_bing(query, max_results=max_results)
 
-        results = await _search_google(query, max_results=max_results)
-        if results:
-            return "\n\n".join(results)
+        if items:
+            formatted = []
+            for i, it in enumerate(items, 1):
+                formatted.append(f"{i}. [{it['title']}]({it['url']})\n   {it['snippet']}")
+            return "\n\n".join(formatted)
 
         return f"Không tìm thấy kết quả phù hợp cho: '{query}'."
     except Exception as e:
@@ -182,15 +219,19 @@ AGENT_TOOLS_SCHEMA: List[Dict[str, Any]] = [
         "function": {
             "name": "web_search",
             "description": (
-                "Tìm kiếm thông tin thực tế, tin tức mới nhất, tỷ giá, "
-                "thời tiết, sự kiện hiện tại trên internet."
+                "Tìm kiếm thông tin thực tế, tin tức mới nhất, tỷ giá, giá vàng, "
+                "giá xăng dầu, thời tiết, sự kiện hiện tại trên internet. "
+                "Trả về danh sách tiêu đề, đường dẫn URL và đoạn trích. "
+                "Nếu cần đọc số liệu chi tiết hoặc toàn bộ bảng giá, hãy lấy URL và gọi tiếp read_webpage(url)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Từ khóa tìm kiếm (ví dụ: 'giá vàng hôm nay', 'thời tiết Hà Nội')",
+                        "description": (
+                            "Từ khóa tìm kiếm (ví dụ: 'giá xăng hôm nay Petrolimex', 'giá vàng SJC hôm nay')"
+                        ),
                     }
                 },
                 "required": ["query"],
@@ -201,13 +242,16 @@ AGENT_TOOLS_SCHEMA: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_webpage",
-            "description": "Đọc và trích xuất nội dung bài viết từ một đường link URL mà người dùng gửi.",
+            "description": (
+                "Đọc và trích xuất nội dung chi tiết (bảng giá, số liệu, bảng biểu, bài báo) "
+                "từ một đường link URL (do người dùng cung cấp hoặc từ kết quả tìm kiếm web_search)."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "Địa chỉ URL đầy đủ của trang web (ví dụ: 'https://vnexpress.net/...')",
+                        "description": "Địa chỉ URL đầy đủ của trang web (ví dụ: 'https://giaxanghomnay.com/')",
                     }
                 },
                 "required": ["url"],

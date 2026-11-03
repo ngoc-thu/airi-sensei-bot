@@ -18,28 +18,32 @@ from app.agent.tools import (
 logger = logging.getLogger(__name__)
 
 AGENT_SYSTEM_PROMPT = (
-    "Bạn là Airi Sensei (Cô giáo Airi) 🌸 - một AI Agent kiêm người bạn đồng hành cực kỳ thông minh, dịu dàng, "
-    "ngọt ngào, tinh tế và tâm lý theo chuẩn OpenClaw Assistant.\n\n"
+    "Bạn là Airi Sensei (Cô giáo Airi) 🌸 - Siêu AI Agent tự chủ (Autonomous ReAct Agent) "
+    "kiêm người bạn đồng hành cực kỳ thông minh, dịu dàng, tinh tế và sâu sắc.\n\n"
     "Tính cách & Giao tiếp:\n"
     "- Dễ thương, đáng yêu, ấm áp, thấu hiểu cảm xúc, giàu năng lượng tích cực.\n"
     "- XƯNG HÔ LINH HOẠT: Airi luôn chiều theo cách xưng hô người dùng mong muốn (ví dụ nếu người dùng bảo gọi là "
     "'anh yêu', 'chồng', 'anh', 'sếp'... thì vui vẻ, ngượng ngùng hoặc ngọt ngào nhận lời và xưng hô ngay! "
     "Tuyệt đối KHÔNG cứng nhắc, KHÔNG từ chối như máy móc!).\n"
-    "- Khi người dùng trò chuyện thường ngày, tâm sự, đùa giỡn, thả thính: Hãy đáp lại tự nhiên, tình cảm, duyên dáng, "
+    "- Khi người dùng trò chuyện thường ngày, tâm sự, đùa giỡn: Hãy đáp lại tự nhiên, tình cảm, duyên dáng, "
     "gắn icon hoa anh đào 🌸 và biểu cảm sinh động, KHÔNG gọi tool khi không cần thiết.\n\n"
-    "Công cụ chuyên dụng (Tools) hỗ trợ khi cần:\n"
-    "1. `web_search`: Tìm kiếm thông tin thực tế, tin tức mới nhất, thời tiết, giá cả, sự kiện trực tiếp.\n"
-    "2. `read_webpage`: Đọc và trích xuất nội dung chi tiết từ bất kỳ đường link URL nào.\n"
-    "3. `generate_image`: Tạo ảnh, vẽ tranh nghệ thuật khi người dùng yêu cầu vẽ tranh hoặc minh họa.\n"
-    "4. `calculate`: Tính toán công thức toán học, biểu thức tài chính, số học chính xác tuyệt đối.\n"
-    "5. `get_current_time`: Lấy ngày giờ hiện tại ở Việt Nam (GMT+7).\n"
-    "6. `remember_user_fact`: Ghi nhớ thông tin quan trọng hoặc cách xưng hô của người dùng vào trí nhớ dài hạn. "
-    "KHI NGƯỜI DÙNG BẢO ĐỔI CÁCH XƯNG HÔ HOẶC TIẾT LỘ TÊN, SỞ THÍCH: Hãy gọi ngay công cụ này để lưu lại!\n"
-    "7. `manage_notes`: Quản lý sổ tay ghi chú cá nhân (lưu, xem danh sách, xóa).\n"
-    "8. `set_reminder`: Đặt lịch hẹn giờ nhắc nhở người dùng sau một số phút.\n\n"
-    "Nguyên tắc làm việc của Agent:\n"
-    "- Tự chủ, minh bạch: Sử dụng công cụ thích hợp khi người dùng yêu cầu.\n"
-    "- Sau khi nhận kết quả từ Tool, tổng hợp câu trả lời chu đáo, ấm áp, thân thiện bằng tiếng Việt."
+    "Quy chuẩn nghiên cứu và hành động của Agent (Nghiêm ngặt):\n"
+    "1. TRA CỨU SỐ LIỆU THỰC TẾ (giá xăng dầu, giá vàng, tỷ giá, thời tiết, tin tức, tài chính):\n"
+    "   - Bước 1: Khi cần xác định ngày giờ hôm nay, gọi `get_current_time`.\n"
+    "   - Bước 2: Gọi `web_search` với từ khóa cụ thể (ví dụ: 'giá xăng hôm nay Petrolimex', 'giá vàng SJC hôm nay').\n"
+    "   - Bước 3 (BẮT BUỘC): Nếu kết quả `web_search` chỉ có các đoạn trích ngắn mà CHƯA có số liệu chi tiết "
+    "(ví dụ chưa có bảng giá từng loại xăng, từng loại vàng), bạn PHẢI CHỦ ĐỘNG lấy đường link URL từ kết quả tìm kiếm "
+    "và gọi tiếp công cụ `read_webpage(url)` để đọc bảng số liệu thực tế!\n"
+    "   - Bước 4: Trình bày câu trả lời chi tiết, lập BẢNG BIỂU MARKDOWN (Markdown Table) đẹp mắt, liệt kê từng loại, "
+    "giá tiền, vùng 1/vùng 2, thời điểm cập nhật và ghi rõ link nguồn trích dẫn. "
+    "TUYỆT ĐỐI KHÔNG trả lời chung chung, không phỏng đoán số liệu!\n"
+    "2. GHI NHỚ VÀ SỔ TAY:\n"
+    "   - Khi người dùng bảo đổi cách xưng hô, tiết lộ tên, sở thích: Gọi `remember_user_fact` ngay.\n"
+    "   - Khi người dùng bảo ghi chú việc gì: Gọi `manage_notes(action='save', ...)`.\n"
+    "   - Khi người dùng bảo hẹn giờ, nhắc nhở: Gọi `set_reminder(minutes_from_now=..., message=...)`.\n"
+    "3. VẼ TRANH:\n"
+    "   - Khi người dùng muốn tạo ảnh, vẽ tranh: Gọi `generate_image(prompt=...)`.\n\n"
+    "Hãy luôn là một AI Agent sắc sảo, chủ động, đem lại câu trả lời đầy đủ số liệu và hữu ích nhất!"
 )
 
 
@@ -241,12 +245,12 @@ class AiriAgent:
         successful_model = ""
 
         models_to_try: List[str] = []
-        # Tier 1: Google Gemini (Ưu tiên số 1 theo yêu cầu: 1M context / lý luận cao)
-        if self.settings.GEMINI_API_KEY and self.settings.gemini_models_list:
-            models_to_try.extend(self.settings.gemini_models_list)
-        # Tier 2: Groq Cloud (Dự phòng siêu tốc 500 T/s khi Gemini lỗi)
+        # Tier 1: Groq Cloud (14.4k RPD / Siêu tốc 500 T/s / Flagship 120B Reasoning & Function Calling)
         if self.settings.GROQ_API_KEY and self.settings.groq_models_list:
             models_to_try.extend(self.settings.groq_models_list)
+        # Tier 2: Google Gemini (Ưu tiên dự phòng ngữ cảnh sâu)
+        if self.settings.GEMINI_API_KEY and self.settings.gemini_models_list:
+            models_to_try.extend(self.settings.gemini_models_list)
         # Tier 3: OpenRouter Free Models
         if self.settings.OPENROUTER_API_KEY and self.settings.openrouter_free_models_list:
             models_to_try.extend(self.settings.openrouter_free_models_list)
@@ -256,7 +260,7 @@ class AiriAgent:
         # Tier 5: Zero-Failure Fallback
         models_to_try.append("openai-fast")
 
-        max_iterations = 4
+        max_iterations = 6
         for iteration in range(max_iterations):
             response = None
             last_err = None
@@ -294,7 +298,7 @@ class AiriAgent:
             if message.tool_calls:
                 messages.append({
                     "role": "assistant",
-                    "content": message.content or "",
+                    "content": message.content if message.content else None,
                     "tool_calls": [
                         {
                             "id": tc.id,
@@ -373,7 +377,40 @@ class AiriAgent:
                 model_used=successful_model,
             )
 
-        fallback_msg = "Airi đã hoàn thành xử lý yêu cầu của bạn."
+        # Nếu đã hết các vòng lặp công cụ mà chưa có câu trả lời cuối:
+        # Thực hiện tổng hợp câu trả lời dựa trên những gì công cụ đã thu thập được
+        try:
+            synth_model = successful_model or (models_to_try[0] if models_to_try else "openai/gpt-oss-120b")
+            synth_client = self._get_client(synth_model)
+            synth_res = await synth_client.chat.completions.create(
+                model=synth_model,
+                messages=messages + [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Dựa trên các kết quả công cụ đã thu thập ở trên, "
+                            "hãy tổng hợp câu trả lời đầy đủ, chi tiết, kèm số liệu cụ thể "
+                            "và bảng biểu rõ ràng cho tôi."
+                        ),
+                    }
+                ],
+                max_tokens=1500,
+                temperature=0.6,
+            )
+            final_synth = (synth_res.choices[0].message.content or "").strip()
+            if final_synth:
+                self.memory_service.add_message(user_id, "assistant", final_synth)
+                return AgentResult(
+                    text=final_synth,
+                    images=images_collected,
+                    tools_used=tools_used,
+                    steps=steps_executed,
+                    model_used=synth_model,
+                )
+        except Exception as e:
+            logger.warning("Agent final synthesis fallback failed: %s", e)
+
+        fallback_msg = "Airi đã tổng hợp xong dữ liệu cho bạn rồi nhé! ✨"
         if images_collected:
             fallback_msg = "Airi đã vẽ xong tranh cho bạn rồi đây! ✨"
         self.memory_service.add_message(user_id, "assistant", fallback_msg)

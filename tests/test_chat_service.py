@@ -12,6 +12,7 @@ def mock_settings():
         AI_API_KEY="mock_key",
         AI_PRIMARY_MODEL="deepseek-v4.1-flash",
         AI_FALLBACK_MODELS="qwen3.8-flash",
+        OPENROUTER_API_KEY="",
     )
 
 

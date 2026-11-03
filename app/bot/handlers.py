@@ -149,19 +149,19 @@ async def models_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not await check_authorization(update):
         return
 
-    gemini_list = ", ".join(settings.gemini_models_list) if settings.GEMINI_API_KEY else "Chưa kích hoạt"
     groq_list = ", ".join(settings.groq_models_list) if settings.GROQ_API_KEY else "Chưa kích hoạt"
+    gemini_list = ", ".join(settings.gemini_models_list) if settings.GEMINI_API_KEY else "Chưa kích hoạt"
     fallback_list = ", ".join(settings.fallback_models_list)
     or_free_list = ", ".join(settings.openrouter_free_models_list)
     text = (
         "🤖 **CẤU HÌNH AI AGENT MODELS & CASCADING FALLBACK**\n\n"
-        f"🌟 **Tier 1 - Google Gemini (Ưu tiên chính):** `{gemini_list}`\n"
-        f"⚡ **Tier 2 - Groq Cloud (Dự phòng siêu tốc):** `{groq_list}`\n"
+        f"⚡ **Tier 1 - Groq Cloud (Siêu tốc 500 T/s - Flagship 120B MoE):** `{groq_list}`\n"
+        f"🌟 **Tier 2 - Google Gemini (1M Context / Đa phương thức):** `{gemini_list}`\n"
         f"🥉 **Tier 3 - OpenRouter Free Tier:** `{or_free_list}`\n"
         f"🔹 **Tier 4 - B.AI Models:** `{settings.AI_PRIMARY_MODEL}`, `{fallback_list}`\n"
         f"🌸 **Tier 5 - Zero-Failure Fallback:** `openai-fast` (Pollinations GPT-OSS 20B)\n"
         f"🎨 **Image Engine:** `{settings.IMAGE_MODEL}` (Flux 1024x1024)\n\n"
-        "💡 *Cơ chế:* Ưu tiên Gemini xử lý; nếu lỗi hoặc bận sẽ tự động chuyển sang Groq tức thì!"
+        "💡 *Cơ chế:* Ưu tiên Groq 120B suy luận và gọi công cụ siêu tốc; tự động luân chuyển fallback khi bận!"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 

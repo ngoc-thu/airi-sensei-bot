@@ -20,3 +20,13 @@ def test_clean_html_to_text():
     assert "Tiêu đề" in text
     assert "Nội dung bài viết." in text
     assert "style" not in text
+
+
+def test_clean_html_to_text_tables():
+    raw = (
+        '<table><tr class="[&>td]:p-2"><td>Xăng RON 95</td><td>24,000</td></tr>'
+        "<tr><td>Xăng E5</td><td>23,500</td></tr></table>"
+    )
+    text = clean_html_to_text(raw)
+    assert "Xăng RON 95 | 24,000" in text
+    assert "Xăng E5 | 23,500" in text
